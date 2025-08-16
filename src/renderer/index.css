@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 1Password-inspired design system for 2025 */
+:root {
+  /* Core colors - 1Password blue theme */
+  --background: 0 0% 100%;
+  --foreground: 210 6% 20%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 6% 20%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 6% 20%;
+  
+  /* 1Password signature blue */
+  --primary: 214 100% 59%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 214 100% 54%;
+  
+  /* Subtle grays */
+  --secondary: 210 6% 97%;
+  --secondary-foreground: 210 6% 20%;
+  --muted: 210 6% 97%;
+  --muted-foreground: 210 6% 46%;
+  --accent: 210 6% 95%;
+  --accent-foreground: 210 6% 20%;
+  
+  /* Status colors */
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 69% 58%;
+  --success-foreground: 0 0% 100%;
+  --warning: 45 93% 47%;
+  --warning-foreground: 0 0% 100%;
+  
+  /* UI elements */
+  --border: 210 6% 92%;
+  --input: 210 6% 97%;
+  --ring: 214 100% 59%;
+  --radius: 0.75rem;
+  
+  /* Sidebar specific */
+  --sidebar-background: 210 6% 98%;
+  --sidebar-border: 210 6% 93%;
+  --sidebar-hover: 210 6% 95%;
+  --sidebar-active: 214 100% 96%;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  /* Dark theme - 1Password inspired */
+  --background: 210 6% 7%;
+  --foreground: 210 6% 93%;
+  --card: 210 6% 9%;
+  --card-foreground: 210 6% 93%;
+  --popover: 210 6% 9%;
+  --popover-foreground: 210 6% 93%;
+  
+  /* 1Password blue in dark mode */
+  --primary: 214 100% 64%;
+  --primary-foreground: 210 6% 7%;
+  --primary-hover: 214 100% 69%;
+  
+  /* Dark grays */
+  --secondary: 210 6% 12%;
+  --secondary-foreground: 210 6% 93%;
+  --muted: 210 6% 12%;
+  --muted-foreground: 210 6% 65%;
+  --accent: 210 6% 14%;
+  --accent-foreground: 210 6% 93%;
+  
+  /* Status colors for dark */
+  --destructive: 0 84% 65%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 69% 63%;
+  --success-foreground: 210 6% 7%;
+  --warning: 45 93% 52%;
+  --warning-foreground: 210 6% 7%;
+  
+  /* Dark UI elements */
+  --border: 210 6% 18%;
+  --input: 210 6% 12%;
+  --ring: 214 100% 64%;
+  
+  /* Dark sidebar */
+  --sidebar-background: 210 6% 5%;
+  --sidebar-border: 210 6% 15%;
+  --sidebar-hover: 210 6% 12%;
+  --sidebar-active: 214 100% 15%;
+  
+  /* Dark shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: "cv03", "cv04", "cv11";
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Focus styles */
+.focus-ring {
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+}
+
+/* Animation utilities */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-from-left 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-from-right 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+

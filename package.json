@@ -1,0 +1,158 @@
+{
+  "name": "vibe-pass-v5",
+  "version": "1.0.0",
+  "description": "Secure, modern password manager for macOS, Windows, and Linux.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx src",
+    "dev": "concurrently -n RENDERER,MAIN,ELECTRON -c cyan,magenta,green \"cross-env NODE_ENV=development webpack serve --config webpack.renderer.dev.js\" \"cross-env NODE_ENV=development webpack --watch --config webpack.main.dev.js\" \"wait-on http://localhost:3000 && electron .\"",
+    "build": "cross-env NODE_ENV=production webpack --config webpack.main.prod.js && cross-env NODE_ENV=production webpack --config webpack.renderer.prod.js",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder -mwl",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:mac:universal": "electron-builder --mac universal --publish never",
+    "release:mac": "bash ./scripts/notarize_and_release_mac.sh",
+    "test": "jest --runInBand",
+    "test:ci": "jest --ci --coverage",
+    "ci": "npm run lint && npm run typecheck && npm run test:ci && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "build": {
+    "appId": "com.vibepass.app",
+    "productName": "VibePass",
+    "files": [
+      "dist/main/**",
+      "dist/renderer/**",
+      "!dist/**/*.map",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "VibePass-${version}-${arch}.${ext}",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "dmg": {
+      "iconSize": 128,
+      "contents": [
+        {
+          "x": 140,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.864.0",
+    "@aws-sdk/credential-providers": "^3.864.0",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@reduxjs/toolkit": "^2.8.2",
+    "bcryptjs": "^3.0.2",
+    "class-variance-authority": "^0.7.1",
+    "crypto-js": "^4.2.0",
+    "dompurify": "^3.2.6",
+    "electron-store": "^10.1.0",
+    "electron-updater": "^6.6.2",
+    "firebase": "^12.1.0",
+    "i18next": "^25.3.2",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "keytar": "^7.9.0",
+    "lodash": "^4.17.21",
+    "lucide-react": "^0.539.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-i18next": "^15.6.1",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.8.0",
+    "tailwind-merge": "^3.3.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/dompurify": "^3.2.0",
+    "@types/i18next": "^13.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/lodash": "^4.17.20",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/lodash.isequal": "^4.5.8",
+    "@types/lodash.throttle": "^4.1.9",
+    "@types/node": "^24.2.1",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@types/react-i18next": "^8.1.0",
+    "@types/react-router-dom": "^5.3.3",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.39.0",
+    "@typescript-eslint/parser": "^8.39.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.0",
+    "copy-webpack-plugin": "^13.0.0",
+    "cross-env": "^10.0.0",
+    "css-loader": "^7.1.2",
+    "dotenv-webpack": "^8.1.1",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.33.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "html-webpack-plugin": "^5.6.3",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.1.1",
+    "prettier": "^3.6.2",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.14",
+    "ts-jest": "^29.4.1",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
+    "wait-on": "^8.0.4",
+    "webpack": "^5.101.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.2",
+    "webpack-merge": "^6.0.1"
+  }
+}
