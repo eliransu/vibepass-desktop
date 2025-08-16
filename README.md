@@ -16,10 +16,6 @@ Secure, modern, local‑first password manager with enterprise options. Built wi
 - Enterprise‑ready: Uses your AWS profile/region and AWS Secrets Manager for shared or regulated environments.
 - Delightful UX: A focused, fast UI inspired by the best password managers.
 
-### Screenshots
-
-Add screenshots of `Login`, `Unlock`, and `Vault` views here.
-
 ### Look & Feel
 
 |                        |                                 |
