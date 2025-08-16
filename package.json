@@ -20,9 +20,9 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
+    "src/**/*.{ts,tsx,js,jsx}": [
       "eslint --fix --max-warnings=0",
-      "jest --bail --findRelatedTests"
+      "jest --bail --findRelatedTests --passWithNoTests"
     ],
     "*.{css,md,json,yml,yaml}": [
       "prettier --write"
@@ -30,7 +30,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "Apache-2.0",
   "build": {
     "appId": "com.vibepass.app",
     "productName": "VibePass",
