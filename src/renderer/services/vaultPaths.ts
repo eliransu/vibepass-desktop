@@ -37,9 +37,9 @@ export function getVaultSecretName(params: { uid: string; selectedVaultId: strin
   const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown'
   const region = ''
   if (selectedVaultId === 'work') {
-    return `vibepass/${tenant}/${accountId}/${region}/team/vault`
+    return `cloudpass/${tenant}/${accountId}/${region}/team/vault`
   }
-  return `vibepass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
 }
 
 export function getVaultSecretNameWithOverrides(params: { uid: string; selectedVaultId: string; email?: string | null; regionOverride?: string; accountIdOverride?: string }): string {
@@ -48,9 +48,23 @@ export function getVaultSecretNameWithOverrides(params: { uid: string; selectedV
   const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
   const region = regionOverride || ''
   if (selectedVaultId === 'work') {
-    return `vibepass/${tenant}/${accountId}/${region}/team/vault`
+    return `cloudpass/${tenant}/${accountId}/${region}/team/vault`
   }
-  return `vibepass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+}
+
+// Index secret listing user-defined custom vaults for quick navigation
+export function getVaultsIndexSecretNameWithOverrides(params: { uid: string; email?: string | null; regionOverride?: string; accountIdOverride?: string }): string {
+  const { uid,
+    //  email,
+      regionOverride,
+      // accountIdOverride
+     } = params
+  // const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
+  // const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
+  const region = regionOverride || ''
+  // return `cloudpass/${tenant}/${accountId}/${region}/${uid}/_vaults`
+  return `cloudpass/${region}/${uid}/_vaults`
 }
 
 

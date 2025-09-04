@@ -6,7 +6,7 @@ import CryptoJS from 'crypto-js'
 import { deriveKeyFromMasterPassword } from '../../../shared/security/crypto'
 import { useTranslation } from 'react-i18next'
 
-const VERIFIER_PLAINTEXT = 'VibePassVerifierV1'
+const VERIFIER_PLAINTEXT = 'cloudpass.com.VerifierV1'
 
 export function MasterGate({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { t } = useTranslation()
@@ -23,13 +23,13 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
 
   useEffect(() => {
     void (async () => {
-      const salt = await window.vibepass.storeGet<string>('salt')
-      const verifier = await window.vibepass.storeGet<string>('verifier')
+      const salt = await window.cloudpass.storeGet<string>('salt')
+      const verifier = await window.cloudpass.storeGet<string>('verifier')
       const setupComplete = Boolean(salt && verifier)
       setHasSetup(setupComplete)
       
       // Check if biometric authentication is available (no auto-unlock)
-      const hasBiometric = await window.vibepass.biometricCheck()
+      const hasBiometric = await window.cloudpass.biometricCheck()
       setBiometricAvailable(hasBiometric)
     })()
   }, [])
@@ -48,11 +48,11 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
       setError(null)
       
       // This will prompt the user for biometric authentication (Touch ID, Face ID, Windows Hello, etc.)
-      const biometricPassword = await window.vibepass.biometricRetrieve()
+      const biometricPassword = await window.cloudpass.biometricRetrieve()
       
       if (biometricPassword) {
-        const existingSalt = await window.vibepass.storeGet<string>('salt')
-        const existingVerifier = await window.vibepass.storeGet<string>('verifier')
+        const existingSalt = await window.cloudpass.storeGet<string>('salt')
+        const existingVerifier = await window.cloudpass.storeGet<string>('verifier')
         
         if (existingSalt && existingVerifier) {
           const key = deriveKeyFromMasterPassword(biometricPassword, existingSalt)
@@ -92,18 +92,18 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     e.preventDefault()
     setError(null)
     try {
-      const existingSalt = await window.vibepass.storeGet<string>('salt')
-      const existingVerifier = await window.vibepass.storeGet<string>('verifier')
+      const existingSalt = await window.cloudpass.storeGet<string>('salt')
+      const existingVerifier = await window.cloudpass.storeGet<string>('verifier')
       if (!existingSalt || !existingVerifier) {
         // First time setup
         const salt = CryptoJS.lib.WordArray.random(16).toString()
         const key = deriveKeyFromMasterPassword(password, salt)
         const ciphertext = CryptoJS.AES.encrypt(VERIFIER_PLAINTEXT, key).toString()
-        await window.vibepass.storeSet('salt', salt)
-        await window.vibepass.storeSet('verifier', ciphertext)
+        await window.cloudpass.storeSet('salt', salt)
+        await window.cloudpass.storeSet('verifier', ciphertext)
         
         // Store password for biometric authentication (will prompt user for permission)
-        const biometricStored = await window.vibepass.biometricStore(password)
+        const biometricStored = await window.cloudpass.biometricStore(password)
         if (biometricStored) {
           setBiometricAvailable(true)
         }
@@ -125,7 +125,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
       
       // Update biometric store with successful password (will prompt user for permission)
       if (!biometricAvailable) {
-        const biometricStored = await window.vibepass.biometricStore(password)
+        const biometricStored = await window.cloudpass.biometricStore(password)
         if (biometricStored) {
           setBiometricAvailable(true)
         }
@@ -204,9 +204,15 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md border rounded-2xl shadow-xl bg-background">
         <div className="flex justify-center py-8">
-          <div className="h-24 w-24 rounded-full bg-blue-500/15 flex items-center justify-center shadow-inner">
-            <div className="h-12 w-12 rounded-full bg-blue-500" />
-          </div>
+          {/* eslint-disable-next-line */}
+          {/* @ts-ignore */}
+          <dotlottie-player
+            src="https://lottie.host/6475dcd7-35cf-4d93-ac92-01268a2bea4b/3XzoO49bNF.lottie"
+            autoplay
+            loop
+            background="transparent"
+            style={{ width: 112, height: 112 }}
+          />
         </div>
         <form onSubmit={handleSubmit} className="px-6 pb-8 space-y-4">
           <h1 className="text-xl font-semibold text-center">{hasSetup ? t('master.unlock') : t('master.create')}</h1>

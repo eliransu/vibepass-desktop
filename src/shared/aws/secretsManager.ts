@@ -16,11 +16,17 @@ export async function getSecret(client: SecretsManagerClient, secretId: string):
 }
 
 export async function createSecret(client: SecretsManagerClient, name: string, secretString: string): Promise<string | undefined> {
+  const parts = name.split('/')
+  const ownerCandidate = parts[4] || 'unknown'
+  const isWork = ownerCandidate === 'team' || name.includes('/team/')
+  const ownerUid = isWork ? 'team' : ownerCandidate
   const res = await client.send(new CreateSecretCommand({ 
     Name: name, 
     SecretString: secretString,
     Tags: [
-      { Key: 'App', Value: 'VibePass' },
+      { Key: 'App', Value: 'cloudpass' },
+      { Key: 'Scope', Value: isWork ? 'work' : 'personal' },
+      { Key: 'OwnerUid', Value: ownerUid },
     ],
   }))
   return res.ARN
@@ -49,7 +55,7 @@ export async function listAppSecrets(client: SecretsManagerClient): Promise<Team
       NextToken: nextToken,
       Filters: [
         { Key: 'tag-key', Values: ['App'] },
-        { Key: 'tag-value', Values: ['VibePass'] },
+        { Key: 'tag-value', Values: ['cloudpass'] },
       ],
       MaxResults: 50,
     }))

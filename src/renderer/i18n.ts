@@ -6,8 +6,8 @@ const resources = {
   en: {
     translation: {
       app: {
-        title: 'VibePass',
-        welcome: 'Welcome to VibePass – secure, modern password manager.',
+        title: 'CloudPass',
+        welcome: 'Welcome to CloudPass – secure, modern password manager.',
         toggleDir: 'RTL/LTR',
       },
       master: {
@@ -36,6 +36,7 @@ const resources = {
         cards: 'Cards',
         teamVaults: 'Team vaults',
         categories: 'Categories',
+        apiKeys: 'API Keys',
       },
       auth: {
         signingIn: 'Signing in...',
@@ -68,6 +69,7 @@ const resources = {
         cvv: 'CVV',
         name: 'Name',
         secret: 'Secret',
+        details: 'Details',
         cardholderName: 'Cardholder name',
         expiryDate: 'Expiry date',
         words: 'words',
@@ -80,6 +82,7 @@ const resources = {
         edit: 'Edit',
         update: 'Update',
         cancel: 'Cancel',
+        scanQr: 'Scan QR code',
         confirmDelete: 'Confirm Deletion',
         deleteMessage: 'Are you sure you want to delete "{{name}}"? This action cannot be undone.',
         addCard: 'Add Card',
@@ -88,7 +91,25 @@ const resources = {
         editNote: 'Edit Note',
         addPassword: 'Add Password',
         editPassword: 'Edit Password',
+        addApiKey: 'Add API Key',
+        editApiKey: 'Edit API Key',
+        open: 'Open',
         generatePassword: 'Generate Password',
+        copied: 'Copied',
+      },
+      otp: {
+        refreshIn: 'refresh in {{seconds}}s',
+      },
+      qr: {
+        title: 'Scan QR code',
+        instructions: 'Select or capture an image, then drag to crop around the QR. Click Scan to decode.',
+        selectImage: 'Select image',
+        captureScreen: 'Capture screen',
+        scan: 'Scan',
+        cancel: 'Cancel',
+        noQrFound: 'No QR code found in the selected area',
+        dragToCrop: 'Drag to crop',
+        cropReset: 'Reset selection',
       },
       search: {
         placeholder: 'Search…',
@@ -101,6 +122,7 @@ const resources = {
       team: {
         
         description: 'Manage shared vaults for team collaboration',
+        selectAwsProfile: 'Select AWS profile',
         createVault: 'Create Team Vault',
         createDescription: 'Set up a secure shared vault using AWS Secrets Manager',
         awsProfile: 'AWS Profile',
@@ -113,7 +135,7 @@ const resources = {
         ssoExpiredInline: 'Your AWS SSO session has expired for the selected profile. Please run "aws sso login --profile <your-profile>" in your terminal and try again.',
         createFailed: 'Failed to create team vault. Please check your AWS credentials and try again.',
         teamVaultsList: 'Team Vaults in AWS',
-        teamVaultsListDesc: 'These are Secrets Manager items tagged for VibePass in the selected region/profile.',
+        teamVaultsListDesc: 'These are Secrets Manager items tagged for cloudpass in the selected region/profile.',
         openInConsole: 'Open in Console',
         retrieve: 'Retrieve Secret',
         loading: 'Loading...',
@@ -133,14 +155,15 @@ const resources = {
         cardNumberCopied: 'Card number copied to clipboard',
         cvvCopied: 'CVV copied to clipboard',
         arnCopied: 'ARN copied to clipboard',
+        secretCopied: 'Secret copied to clipboard',
       },
     },
   },
   he: {
     translation: {
       app: {
-        title: 'ויייב-פאס',
-        welcome: 'ברוכים הבאים ל-VibePass – מנהל סיסמאות מאובטח ומודרני.',
+        title: 'cloudpass',
+        welcome: 'ברוכים הבאים ל-cloudpass – מנהל סיסמאות מאובטח ומודרני.',
         toggleDir: 'כיוון',
       },
       master: {
@@ -169,9 +192,10 @@ const resources = {
         cards: 'כרטיסים',
         teamVaults: 'כספות צוות',
         categories: 'קטגוריות',
+        apiKeys: 'מפתחות API',
       },
       auth: {
-
+        
         signIn: 'התחברות',
         google: 'המשך עם Google',
         signOut: 'התנתקות',
@@ -201,6 +225,7 @@ const resources = {
         cvv: 'CVV',
         name: 'שם',
         secret: 'סוד',
+        details: 'פרטים',
         cardholderName: 'שם בעל הכרטיס',
         expiryDate: 'תאריך תפוגה',
         words: 'מילים',
@@ -213,6 +238,7 @@ const resources = {
         edit: 'ערוך',
         update: 'עדכן',
         cancel: 'בטל',
+        scanQr: 'סרוק קוד QR',
         confirmDelete: 'אישור מחיקה',
         deleteMessage: 'האם אתם בטוחים שברצונכם למחוק את "{{name}}"? פעולה זו אינה ניתנת לביטול.',
         addCard: 'הוסף כרטיס',
@@ -221,7 +247,25 @@ const resources = {
         editNote: 'ערוך פתק',
         addPassword: 'הוסף סיסמה',
         editPassword: 'ערוך סיסמה',
+        addApiKey: 'הוסף מפתח API',
+        editApiKey: 'ערוך מפתח API',
+        open: 'פתח',
         generatePassword: 'צור סיסמה',
+        copied: 'הועתק',
+      },
+      otp: {
+        refreshIn: 'יתעדכן בעוד {{seconds}} שנ׳',
+      },
+      qr: {
+        title: 'סריקת קוד QR',
+        instructions: 'בחרו או צלמו תמונה, ואז גררו לבחירת אזור סביב ה-QR. לחצו סריקה לפענוח.',
+        selectImage: 'בחרו תמונה',
+        captureScreen: 'צילום מסך',
+        scan: 'סריקה',
+        cancel: 'ביטול',
+        noQrFound: 'לא נמצא קוד QR באזור הנבחר',
+        dragToCrop: 'גררו לבחירה',
+        cropReset: 'איפוס בחירה',
       },
       search: {
         placeholder: 'חיפוש…',
@@ -233,6 +277,7 @@ const resources = {
       },
       team: {
         description: 'ניהול כספות משותפות לשיתוף פעולה צוותי',
+        selectAwsProfile: 'בחרו פרופיל AWS',
         createVault: 'צור כספת צוות',
         createDescription: 'הגדרת כספת משותפת מאובטחת באמצעות AWS Secrets Manager',
         awsProfile: 'פרופיל AWS',
@@ -245,7 +290,7 @@ const resources = {
         ssoExpiredInline: 'סשן ה-SSO של AWS פג עבור הפרופיל הנבחר. יש להריץ "aws sso login --profile <הפרופיל>" בטרמינל ולנסות שוב.',
         createFailed: 'יצירת כספת הצוות נכשלה. בדקו את האישורים שלכם ב-AWS ונסו שוב.',
         teamVaultsList: 'כספות צוות ב-AWS',
-        teamVaultsListDesc: 'אלו פריטי Secrets Manager המסומנים עבור VibePass באזור/פרופיל שנבחר.',
+        teamVaultsListDesc: 'אלו פריטי Secrets Manager המסומנים עבור cloudpass באזור/פרופיל שנבחר.',
         openInConsole: 'פתח בקונסול',
         retrieve: 'שלוף סוד',
         loading: 'טוען...',
@@ -263,6 +308,7 @@ const resources = {
         cardNumberCopied: 'מספר הכרטיס הועתק ללוח',
         cvvCopied: 'ה-CVV הועתק ללוח',
         arnCopied: 'ה-ARN הועתק ללוח',
+        secretCopied: 'הסוד הועתק ללוח',
       },
     },
   },

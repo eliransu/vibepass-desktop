@@ -4,10 +4,8 @@ import { NavLink } from 'react-router-dom'
 import { TopBar } from './TopBar'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
-import { setSelectedVaultId, toggleSidebar } from '../../features/ui/uiSlice'
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore'
-import { db, firebaseEnabled } from '../../../shared/firebase'
-import { deriveTenantFromEmail } from '../../services/vaultPaths'
+import { setSelectedVaultId, toggleSidebar, setSelectedItemId, setSearchQuery } from '../../features/ui/uiSlice'
+import { getVaultsIndexSecretNameWithOverrides } from '../../services/vaultPaths'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 
@@ -15,11 +13,12 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const sidebarCollapsed = useSelector((s: RootState) => s.ui.sidebarCollapsed)
+  const selectedVaultId = useSelector((s: RootState) => s.ui.selectedVaultId)
   
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr] bg-background">
       <TopBar />
-      <div className={`grid min-h-0 transition-all duration-300 ${sidebarCollapsed ? 'grid-cols-[52px_1fr]' : 'grid-cols-[224px_1fr]'}`}>
+      <div className={`grid min-h-0 overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'grid-cols-[52px_1fr]' : 'grid-cols-[224px_1fr]'}`}>
         <aside className={`bg-sidebar border-r border-sidebar-border flex flex-col min-h-0 transition-all duration-300 ${sidebarCollapsed ? 'overflow-hidden' : ''}`}>
           {/* Header with logo and toggle */}
           <div className={`${sidebarCollapsed ? 'p-2' : 'p-5'} border-b border-sidebar-border`}>
@@ -65,11 +64,6 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {t('vault.vaults')}
                   </span>
-                  <button className="w-4 h-4 rounded bg-muted/50 hover:bg-muted flex items-center justify-center transition-colors">
-                    <svg className="w-2.5 h-2.5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
                 </div>
                 <VaultsList />
               </div>
@@ -96,10 +90,27 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                   to="/passwords"
                   title={sidebarCollapsed ? t('nav.passwords') : undefined}
                 >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-3a1 1 0 011-1h2.586l6.243-6.243A6 6 0 0121 9z" />
+                  <svg className="w-[12.42px] h-[12.42px] flex-shrink-0" viewBox="0 0 21.6 21.6" fill="currentColor">
+                    <path d="M16.2 9V7.2a5.4 5.4 0 1 0-10.8 0V9H3.6A1.8 1.8 0 0 0 1.8 10.8v7.2A1.8 1.8 0 0 0 3.6 19.8h14.4a1.8 1.8 0 0 0 1.8-1.8v-7.2A1.8 1.8 0 0 0 18 9h-1.8zm-9-1.8a3.6 3.6 0 1 1 7.2 0V9h-7.2V7.2zm10.8 10.8H3.6v-7.2h14.4v7.2zm-7.2-3.6a1.8 1.8 0 1 1 3.6 0 1.8 1.8 0 0 1-3.6 0z" fill="currentColor" />
                   </svg>
                   {!sidebarCollapsed && t('nav.passwords')}
+                </NavLink>
+
+                <NavLink 
+                  className={({isActive}) => `
+                    group flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${sidebarCollapsed ? 'justify-center' : ''}
+                    ${isActive 
+                      ? 'bg-sidebar-active text-primary shadow-sm' 
+                      : 'text-foreground hover:bg-sidebar-hover hover:text-foreground'
+                    }
+                  `} 
+                  to="/api-keys"
+                  title={sidebarCollapsed ? t('nav.apiKeys') : undefined}
+                >
+                  <svg className="w-[10.35px] h-[10.35px] flex-shrink-0" viewBox="0 0 18 18" fill="currentColor">
+                    <path d="M17.408 3.412a1.974 1.974 0 0 0 0-2.82 1.973 1.973 0 0 0-2.819 0l-.29.29-.59-.59a1.009 1.009 0 0 0-1.65.35l-.35-.35a1.004 1.004 0 1 0-1.42 1.42l.35.35a1.033 1.033 0 0 0-.58.58l-.35-.35a1.004 1.004 0 0 0-1.42 1.42L9.879 5.3l-3.02 3.01c-.01.01-.02.03-.03.04A4.885 4.885 0 0 0 5 8a5 5 0 1 0 5 5 4.885 4.885 0 0 0-.35-1.83c.01-.01.03-.02.04-.03l7.718-7.728zM5 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor" fillRule="evenodd"/>
+                  </svg>
+                  {!sidebarCollapsed && t('nav.apiKeys')}
                 </NavLink>
                 
                 <NavLink 
@@ -142,7 +153,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
           </div>
         </aside>
         
-        <main className="bg-background min-h-0 overflow-auto">
+        <main className="bg-background min-h-0 overflow-hidden" key={selectedVaultId}>
           {children}
         </main>
       </div>
@@ -155,10 +166,14 @@ function VaultsList(): React.JSX.Element {
   const dispatch = useDispatch()
   const selected = useSelector((s: RootState) => s.ui.selectedVaultId)
   const user = useSelector((s: RootState) => s.auth.user)
+  const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
+  const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
+  const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const [customVaults, setCustomVaults] = useState<Array<{ id: string; name: string }>>([])
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [vaultName, setVaultName] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingVaults, setIsLoadingVaults] = useState(true)
 
   const baseItems = useMemo(() => ([
     { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
@@ -168,26 +183,29 @@ function VaultsList(): React.JSX.Element {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      if (!firebaseEnabled || !db || !user?.uid) return
+      setIsLoadingVaults(true)
+      if (!user?.uid) { setIsLoadingVaults(false); return }
       try {
-        const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(user?.email) || 'default'
-        const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown'
-        const region = (typeof localStorage !== 'undefined' && localStorage.getItem('awsRegion'))
-        const colPath = `${tenant}/${accountId}/${region}/${user.uid}/_vaults`
-        const snap = await getDocs(collection(db, colPath))
+        const profile = awsProfile
+        const accountId = awsAccountId
+        const region = awsRegion || (await (window as any).cloudpass?.awsGetDefaultRegion(profile)) || 'us-east-1'
+        const name = getVaultsIndexSecretNameWithOverrides({ uid: user.uid, accountIdOverride: accountId, regionOverride: region, email: user?.email })
+        const secret = await (window as any).cloudpass?.vaultRead(region, name, profile)
         if (!mounted) return
-        const list: Array<{ id: string; name: string }> = []
-        snap.forEach(d => {
-          const data = d.data() as any
-          list.push({ id: d.id, name: data?.name || d.id })
-        })
-        setCustomVaults(list)
+        if (secret) {
+          const parsed = JSON.parse(secret || '[]') as Array<{ id: string; name: string }>
+          setCustomVaults(Array.isArray(parsed) ? parsed : [])
+        } else {
+          setCustomVaults([])
+        }
       } catch {
         // ignore
+      } finally {
+        setIsLoadingVaults(false)
       }
     })()
     return () => { mounted = false }
-  }, [user?.uid, user?.email])
+  }, [user?.uid, user?.email, awsRegion, awsProfile, awsAccountId])
 
   async function createVaultByName(name: string): Promise<void> {
     const trimmed = name.trim()
@@ -196,19 +214,16 @@ function VaultsList(): React.JSX.Element {
     if (!slug) return
     setIsSaving(true)
     try {
-      if (!firebaseEnabled || !db || !user?.uid) {
-        dispatch(setSelectedVaultId(slug))
-        setCustomVaults(prev => [...prev, { id: slug, name: trimmed }])
-        setIsAddOpen(false)
-        setVaultName('')
-        return
-      }
-      const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(user?.email) || 'default'
-      const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown'
-      const region = (typeof localStorage !== 'undefined' && localStorage.getItem('awsRegion')) || 'eu-west-1'
-      const colPath = `${tenant}/${accountId}/${region}/${user.uid}/_vaults`
-      await setDoc(doc(collection(db, colPath), slug), { name: trimmed })
-      setCustomVaults(prev => [...prev.filter(v => v.id !== slug), { id: slug, name: trimmed }])
+      if (!user?.uid) return
+      const profile = awsProfile
+      const accountId = awsAccountId
+      const region = awsRegion || (await (window as any).cloudpass?.awsGetDefaultRegion(profile)) || 'us-east-1'
+      const indexName = getVaultsIndexSecretNameWithOverrides({ uid: user.uid, accountIdOverride: accountId, regionOverride: region, email: user?.email })
+      const current = await (window as any).cloudpass?.vaultRead(region, indexName, profile)
+      const parsed = current ? (JSON.parse(current) as Array<{ id: string; name: string }>) : []
+      const next = [...parsed.filter(v => v.id !== slug), { id: slug, name: trimmed }]
+      await (window as any).cloudpass?.vaultWrite(region, indexName, JSON.stringify(next), profile)
+      setCustomVaults(next)
       dispatch(setSelectedVaultId(slug))
       setIsAddOpen(false)
       setVaultName('')
@@ -221,10 +236,25 @@ function VaultsList(): React.JSX.Element {
 
   return (
     <div className="space-y-1">
-      {[...baseItems, ...customVaults].map((vault: any) => (
+      {isLoadingVaults ? (
+        <>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg animate-pulse">
+              <div className="w-5 h-5 rounded-md bg-muted-foreground/20 flex-shrink-0" />
+              <div className="h-3 w-24 bg-muted-foreground/20 rounded" />
+            </div>
+          ))}
+        </>
+      ) : (
+      [...baseItems, ...customVaults].map((vault: any) => (
         <button 
           key={vault.id} 
-          onClick={() => dispatch(setSelectedVaultId(vault.id))} 
+          onClick={() => {
+            dispatch(setSelectedVaultId(vault.id))
+            // Reset current selection and search when switching vaults
+            dispatch(setSelectedItemId(null))
+            dispatch(setSearchQuery(''))
+          }} 
           className={`
             w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-left
             ${selected === vault.id 
@@ -260,7 +290,8 @@ function VaultsList(): React.JSX.Element {
             <div className="ml-auto w-1 h-1 bg-primary rounded-full"></div>
           )}
         </button>
-      ))}
+      ))
+      )}
       
       <button onClick={() => setIsAddOpen(true)} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover mt-2">
         <div className="w-5 h-5 rounded-md border-2 border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0">

@@ -4,9 +4,9 @@
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     // First try using the preload API (Electron) - only if running in Electron
-    if (window.vibepass && typeof window.vibepass.copyToClipboard === 'function') {
+    if (window.cloudpass && typeof window.cloudpass.copyToClipboard === 'function') {
       try {
-        window.vibepass.copyToClipboard(text)
+        window.cloudpass.copyToClipboard(text)
         return true
       } catch (err) {
         console.warn('Electron clipboard API failed, falling back:', err)

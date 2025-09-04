@@ -1,9 +1,7 @@
 import { createApi, fakeBaseQuery } from '@reduxjs/toolkit/query/react'
-import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
-import { db, firebaseEnabled } from '../../shared/firebase'
 import { encryptJson, decryptJson } from '../../shared/security/crypto'
-// Ambient typing is provided via types/preload.d.ts; use `any` cast for window.vibepass
 import { resolveVaultContext, getVaultSecretNameWithOverrides } from './vaultPaths'
+import { v4 as uuidv4 } from 'uuid'
 
 export type VaultItem = {
   id: string
@@ -13,7 +11,7 @@ export type VaultItem = {
   url?: string
   notes?: string
   tags?: string[]
-  category?: 'passwords' | 'notes' | 'cards' | 'team'
+  category?: 'passwords' | 'notes' | 'cards' | 'team' | 'api-keys'
   favorite?: boolean
   // New: arn of secret in AWS that stores the encrypted item JSON
   ssmArn?: string
@@ -27,37 +25,22 @@ export const vaultApi = createApi({
     // List: read metadata from Firestore and merge with consolidated SSM vault blob
     list: build.query<VaultItem[], { uid: string; key: string; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
       async queryFn({ uid, key, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
-        if (!firebaseEnabled || !db) {
-          return { data: [] }
-        }
         try {
-          const { collectionPath, region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
-          const col = collection(db, collectionPath)
-          const snap = await getDocs(col)
-          const metaById: Record<string, VaultItem> = {}
-          snap.forEach((d) => {
-            const data = d.data() as any
-            metaById[d.id] = {
-              id: d.id,
-              title: data.title ?? '',
-              tags: data.tags ?? [],
-              category: data.category ?? 'passwords',
-              favorite: data.favorite ?? false,
-            }
-          })
-
-          // Pull consolidated vault secret and merge
+          const { region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
+          // Pull consolidated vault secret
           const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
-          const preload = (window as any).vibepass as any
+          const isWork = selectedVaultId === 'work'
+          const preload = (window as any).cloudpass as any
           let consolidated: Record<string, VaultItem> = {}
           if (preload) {
             const secret = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
             if (secret) {
-              consolidated = decryptJson<Record<string, VaultItem>>(secret, key)
+              consolidated = isWork
+                ? (JSON.parse(secret) as Record<string, VaultItem>)
+                : decryptJson<Record<string, VaultItem>>(secret, key)
             }
           }
-          const merged: VaultItem[] = Object.values(metaById).map((m) => ({ ...m, ...(consolidated[m.id] || {}) }))
-          return { data: merged }
+          return { data: Object.values(consolidated) }
         } catch (e: any) {
           return { error: { error: e.message } as any }
         }
@@ -66,25 +49,24 @@ export const vaultApi = createApi({
         result ? [...result.map((i) => ({ type: 'Vault' as const, id: i.id })), { type: 'Vault', id: 'LIST' }] : [{ type: 'Vault', id: 'LIST' }],
     }),
     // Create: upsert into consolidated SSM blob (per-vault) and store metadata in Firestore
-    create: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string }>({
-      async queryFn({ uid, key, item, selectedVaultId }) {
-        if (!firebaseEnabled || !db) {
-          return { error: { error: 'Firebase disabled' } as any }
-        }
+    create: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
+      async queryFn({ uid, key, item, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
-          const { collectionPath, region, profile } = resolveVaultContext({ uid, selectedVaultId })
-          const ref = doc(collection(db, collectionPath))
-          await setDoc(ref, { title: item.title, tags: item.tags ?? [], category: item.category ?? 'passwords', favorite: item.favorite ?? false })
+          const { region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
 
           // Update consolidated blob
-          const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId })
-          const preload = (window as any).vibepass as any
+          const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
+          const isWork = selectedVaultId === 'work'
+          const preload = (window as any).cloudpass as any
           if (preload) {
-            const current = await preload.vaultRead(region, name, profile)
-            const parsed: Record<string, VaultItem> = current ? decryptJson<Record<string, VaultItem>>(current, key) : {}
-            parsed[ref.id] = { ...item, id: ref.id }
-            const enc = encryptJson(parsed, key)
-            await preload.vaultWrite(region, name, enc, profile)
+            const current = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const parsed: Record<string, VaultItem> = current
+              ? (isWork ? (JSON.parse(current) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(current, key))
+              : {}
+            const newId = item.id && item.id.trim().length > 0 ? item.id : uuidv4()
+            parsed[newId] = { ...item, id: newId }
+            const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
+            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
           }
           return { data: undefined }
         } catch (e: any) {
@@ -94,24 +76,22 @@ export const vaultApi = createApi({
       invalidatesTags: [{ type: 'Vault', id: 'LIST' }],
     }),
     // Update: modify consolidated blob; update metadata doc
-    update: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string }>({
-      async queryFn({ uid, key, item, selectedVaultId }) {
-        if (!firebaseEnabled || !db) {
-          return { error: { error: 'Firebase disabled' } as any }
-        }
+    update: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
+      async queryFn({ uid, key, item, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
-          const { collectionPath, region, profile } = resolveVaultContext({ uid, selectedVaultId })
-          const ref = doc(db, collectionPath, item.id)
-          await updateDoc(ref, { title: item.title, tags: item.tags ?? [], category: item.category ?? 'passwords', favorite: item.favorite ?? false })
+          const { region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
 
-          const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId })
-          const preload = (window as any).vibepass as any
+          const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
+          const isWork = selectedVaultId === 'work'
+          const preload = (window as any).cloudpass as any
           if (preload) {
-            const current = await preload.vaultRead(region, name, profile)
-            const parsed: Record<string, VaultItem> = current ? decryptJson<Record<string, VaultItem>>(current, key) : {}
+            const current = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const parsed: Record<string, VaultItem> = current
+              ? (isWork ? (JSON.parse(current) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(current, key))
+              : {}
             parsed[item.id] = { ...parsed[item.id], ...item }
-            const enc = encryptJson(parsed, key)
-            await preload.vaultWrite(region, name, enc, profile)
+            const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
+            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
           }
           return { data: undefined }
         } catch (e: any) {
@@ -121,24 +101,22 @@ export const vaultApi = createApi({
       invalidatesTags: (_result, _error, arg) => [{ type: 'Vault', id: arg.item.id }],
     }),
     // Remove: delete from consolidated blob; remove doc
-    remove: build.mutation<void, { uid: string; key: string; id: string; selectedVaultId: string }>({
-      async queryFn({ uid, key, id, selectedVaultId }) {
-        if (!firebaseEnabled || !db) {
-          return { error: { error: 'Firebase disabled' } as any }
-        }
+    remove: build.mutation<void, { uid: string; key: string; id: string; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
+      async queryFn({ uid, key, id, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
-          const { collectionPath, region, profile } = resolveVaultContext({ uid, selectedVaultId })
-          const ref = doc(db, collectionPath, id)
-          const preload = (window as any).vibepass as any
+          const { region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
+          const preload = (window as any).cloudpass as any
           if (preload) {
-            const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId })
-            const current = await preload.vaultRead(region, name, profile)
-            const parsed: Record<string, VaultItem> = current ? decryptJson<Record<string, VaultItem>>(current, key) : {}
+            const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
+            const isWork = selectedVaultId === 'work'
+            const current = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const parsed: Record<string, VaultItem> = current
+              ? (isWork ? (JSON.parse(current) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(current, key))
+              : {}
             delete parsed[id]
-            const enc = encryptJson(parsed, key)
-            await preload.vaultWrite(region, name, enc, profile)
+            const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
+            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
           }
-          await deleteDoc(ref)
           return { data: undefined }
         } catch (e: any) {
           return { error: { error: e.message } as any }

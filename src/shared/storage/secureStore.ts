@@ -11,7 +11,7 @@ const schema: Record<keyof Schema, unknown> = {
 }
 
 export const secureStore = new Store<Schema>({
-  name: 'vibepass',
+  name: 'cloudpass',
   encryptionKey: undefined,
   schema: schema as any,
 })

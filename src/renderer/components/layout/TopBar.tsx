@@ -3,10 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
 import { setAwsRegion as setAwsRegionAction, setAwsProfile as setAwsProfileAction, setAwsAccountId } from '../../features/ui/uiSlice'
-import { auth } from '../../../shared/firebase'
-import { signOut } from 'firebase/auth'
-import { setUser } from '../../features/auth/authSlice'
-
+  
 export function TopBar(): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [theme, setTheme] = useState<string>(() => localStorage.getItem('theme') || 'dark')
@@ -16,6 +13,7 @@ export function TopBar(): React.JSX.Element {
   const [awsProfiles, setAwsProfiles] = useState<Record<string, string>>({})
   const [awsProfile, setAwsProfile] = useState<string>(() => localStorage.getItem('awsProfile') || 'default')
   const [awsRegion, setAwsRegion] = useState<string>('us-east-1')
+  const [ssoLoading, setSsoLoading] = useState<boolean>(false)
   // AWS region order: us-east-1, us-east-2, us-west-1, us-west-2, eu-west-1, eu-west-2, eu-west-3, eu-central-1, eu-north-1, ap-south-1, ap-northeast-1, ap-northeast-2, ap-southeast-1, ap-southeast-2, etc.
   const regions = useMemo(() => [
     'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
@@ -42,7 +40,7 @@ export function TopBar(): React.JSX.Element {
     let mounted = true
     ;(async () => {
       try {
-        const profs = await window.vibepass.awsGetProfiles()
+        const profs = await window.cloudpass.awsGetProfiles()
         if (!mounted) return
         setAwsProfiles(profs)
         const keys = Object.keys(profs || {})
@@ -61,7 +59,7 @@ export function TopBar(): React.JSX.Element {
         // Always resolve region from config for the chosen profile
         let defaultRegion = 'us-east-1'
         try {
-          const cfgRegion = await window.vibepass.awsGetDefaultRegion(nextProfile)
+          const cfgRegion = await window.cloudpass.awsGetDefaultRegion(nextProfile)
           if (cfgRegion && typeof cfgRegion === 'string') defaultRegion = cfgRegion
         } catch {}
         if (!mounted) return
@@ -77,18 +75,18 @@ export function TopBar(): React.JSX.Element {
   async function persistAws(profile: string, region: string) {
     localStorage.setItem('awsProfile', profile)
     // Do not persist awsRegion; it is resolved from ~/.aws/config each time
-    void window.vibepass.storeSet('awsProfile', profile)
+    void window.cloudpass.storeSet('awsProfile', profile)
     dispatch(setAwsProfileAction(profile))
     dispatch(setAwsRegionAction(region))
     // Clear account context immediately to avoid showing data from previous profile
     localStorage.removeItem('awsAccountId')
-    void window.vibepass.storeSet('awsAccountId', '')
+    void window.cloudpass.storeSet('awsAccountId', '')
     dispatch(setAwsAccountId(''))
     try {
-      const account = await window.vibepass.awsGetAccount(profile)
+      const account = await window.cloudpass.awsGetAccount(profile)
       if (account) {
         localStorage.setItem('awsAccountId', account)
-        void window.vibepass.storeSet('awsAccountId', account)
+        void window.cloudpass.storeSet('awsAccountId', account)
         dispatch(setAwsAccountId(account))
       }
       // If missing/expired, avoid popups; inline screens will prompt user
@@ -101,11 +99,11 @@ export function TopBar(): React.JSX.Element {
     void persistAws(awsProfile, awsRegion)
     // ;(async () => {
     //   try {
-    //     const res = await window.vibepass.awsSsoLogin(awsProfile)
+    //     const res = await window.cloudpass.awsSsoLogin(awsProfile)
     //     if (!res?.ok) {
     //       alert(t('team.ssoLoginCta') as string)
     //     } else {
-    //       const account = await window.vibepass.awsGetAccount(awsProfile)
+    //       const account = await window.cloudpass.awsGetAccount(awsProfile)
     //       if (!account) alert(t('team.ssoLoginCta') as string)
     //     }
     //   } catch {
@@ -139,8 +137,9 @@ export function TopBar(): React.JSX.Element {
 
         {/* AWS Profile selector (first) */}
         <div className="relative inline-flex items-center" style={{height: '40px'}}>
+          <label className="mr-2 text-xs text-muted-foreground hidden sm:block">{t('team.selectAwsProfile') as string}</label>
           <select
-            className={`h-10 px-3 bg-muted/50 border border-transparent rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${padSideClass}`}
+            className={`h-10 px-3 bg-muted/50 border border-border/40 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${padSideClass}`}
             style={{ WebkitAppearance: 'none', appearance: 'none' as any, MozAppearance: 'none', background: 'none', backgroundImage: 'none' }}
             value={awsProfile}
             onChange={async (e) => {
@@ -149,7 +148,7 @@ export function TopBar(): React.JSX.Element {
               // Always resolve region from config for selected profile
               let cfgRegion = 'us-east-1'
               try {
-                const r = await window.vibepass.awsGetDefaultRegion(p)
+                const r = await window.cloudpass.awsGetDefaultRegion(p)
                 if (r) cfgRegion = r
               } catch {}
               setAwsRegion(cfgRegion)
@@ -169,14 +168,14 @@ export function TopBar(): React.JSX.Element {
         {/* AWS Region selector (second) */}
         <div className="relative inline-flex items-center" style={{height: '40px'}}>
           <select
-            className={`h-10 px-3 bg-muted/50 border border-transparent rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${padSideClass}`}
+            className={`h-10 px-3 bg-muted/50 border border-border/40 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${padSideClass}`}
             style={{ WebkitAppearance: 'none', appearance: 'none' as any, MozAppearance: 'none', background: 'none', backgroundImage: 'none' }}
             value={awsRegion}
             onChange={async (_e) => {
               // Disable manual selection; always use ~/.aws/config
               let cfgRegion = awsRegion
               try {
-                const r = await window.vibepass.awsGetDefaultRegion(awsProfile)
+                const r = await window.cloudpass.awsGetDefaultRegion(awsProfile)
                 if (r) cfgRegion = r
               } catch {}
               setAwsRegion(cfgRegion)
@@ -195,19 +194,33 @@ export function TopBar(): React.JSX.Element {
 
         {/* AWS SSO Login */}
         <button
-          className={`h-10 px-3 rounded-lg text-sm font-medium transition-colors border ${!awsAccountIdState ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/30' : 'bg-muted/50 hover:bg-muted border-transparent'}`}
+          className={`h-10 px-3 rounded-lg text-sm font-medium transition-colors border disabled:opacity-50 disabled:cursor-not-allowed ${!awsAccountIdState ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/30' : 'bg-muted/50 border-transparent'}`}
           onClick={async () => {
             try {
-              await window.vibepass.awsSsoLogin(awsProfile)
+              setSsoLoading(true)
+              await window.cloudpass.awsSsoLogin(awsProfile)
               // Attempt fetching account after SSO to verify session
-              const account = await window.vibepass.awsGetAccount(awsProfile)
+              const account = await window.cloudpass.awsGetAccount(awsProfile)
               if (account) {
                 localStorage.setItem('awsAccountId', account)
-                void window.vibepass.storeSet('awsAccountId', account)
+                void window.cloudpass.storeSet('awsAccountId', account)
                 dispatch(setAwsAccountId(account))
+              } else {
+                // Clear any stale account id so UI reflects missing/expired SSO
+                localStorage.removeItem('awsAccountId')
+                void window.cloudpass.storeSet('awsAccountId', '')
+                dispatch(setAwsAccountId(''))
               }
-            } catch (e: any) {}
+            } catch {
+              // On failure, ensure stale account id is cleared
+              localStorage.removeItem('awsAccountId')
+              void window.cloudpass.storeSet('awsAccountId', '')
+              dispatch(setAwsAccountId(''))
+            } finally {
+              setSsoLoading(false)
+            }
           }}
+          disabled={ssoLoading}
           title={t('team.ssoLogin') as string}
         >
           {t('team.ssoLogin')}
@@ -230,7 +243,7 @@ export function TopBar(): React.JSX.Element {
           )}
         </button>
 
-        {/* User menu */}
+        {/* User indicator (no sign out) */}
         {user && (
           <div className="flex items-center gap-2.5 pl-2.5 border-l border-border">
             <div className="flex items-center gap-1.5">
@@ -248,18 +261,6 @@ export function TopBar(): React.JSX.Element {
                 <div className="text-xs text-muted-foreground">{user.email}</div>
               </div>
             </div>
-            <button
-              className="h-8 px-3 bg-muted/50 border border-transparent rounded-lg text-xs font-medium hover:bg-muted transition-colors"
-              onClick={async () => {
-                try {
-                  if (auth) await signOut(auth)
-                } catch {}
-                dispatch(setUser(null))
-              }}
-              title={t('auth.signOut') as string}
-            >
-              {t('auth.signOut')}
-            </button>
           </div>
         )}
       </div>

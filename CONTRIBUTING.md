@@ -1,4 +1,4 @@
-## Contributing to VibePass
+## Contributing to cloudpass.dev
 
 Thanks for your interest! We welcome contributions. Please follow the steps below.
 

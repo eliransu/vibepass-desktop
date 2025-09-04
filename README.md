@@ -1,4 +1,4 @@
-## VibePass
+## cloudpass.dev
 
 Secure, modern, local‑first password manager with enterprise options. Built with Electron, React, and TypeScript.
 
@@ -10,7 +10,7 @@ Secure, modern, local‑first password manager with enterprise options. Built wi
 - Multiple vaults: personal, work, and custom
 - macOS notarized builds (hardened runtime, entitlements)
 
-### Why VibePass
+### Why cloudpass.dev
 
 - Local‑first security: Only encrypted strings can leave your machine.
 - Enterprise‑ready: Uses your AWS profile/region and AWS Secrets Manager for shared or regulated environments.
@@ -73,12 +73,12 @@ AWS (optional, enables consolidated per‑vault storage and team workflows)
 
 - Install AWS CLI v2 and configure SSO/profile
 - In the app’s top bar, choose your `AWS Profile` and `AWS Region`
-- Click SSO Login, then VibePass will read/write a single encrypted blob per vault to AWS Secrets Manager
+- Click SSO Login, then cloudpass.dev will read/write a single encrypted blob per vault to AWS Secrets Manager
 
 ### Security Model
 
 - Master key derivation: PBKDF2 with 100k iterations; AES‑256 for encryption
-- On first setup, VibePass stores a salt and an encrypted verifier locally (no master password is stored)
+- On first setup, cloudpass.dev stores a salt and an encrypted verifier locally (no master password is stored)
 - Biometric unlock: macOS Touch ID prompt gates retrieval of the master password stored in secure OS keychain (via Keytar)
 - Storage
   - Local: all secrets are encrypted at rest; UI decrypts in memory after unlock

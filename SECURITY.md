@@ -1,6 +1,6 @@
 ## Security Policy
 
-- Please report vulnerabilities privately via email: security@vibepass.app (or open a GitHub Security Advisory).
+- Please report vulnerabilities privately via email: security@cloudpass.dev (or open a GitHub Security Advisory).
 - Do not file public GitHub issues for sensitive security reports.
 - We aim to acknowledge within 72 hours and fix high severity issues promptly.
 

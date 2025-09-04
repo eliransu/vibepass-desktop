@@ -1,10 +1,10 @@
 import { copyToClipboard } from '../../lib/clipboard'
 
 describe('copyToClipboard', () => {
-  const original = { vibepass: (global as any).window?.vibepass }
+  const original = { cloudpass: (global as any).window?.cloudpass }
 
   beforeEach(() => {
-    ;(global as any).window = { vibepass: undefined }
+    ;(global as any).window = { cloudpass: undefined }
     // Attach clipboard to existing navigator (jsdom defines navigator)
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       configurable: true,
@@ -18,7 +18,7 @@ describe('copyToClipboard', () => {
   })
 
   afterEach(() => {
-    ;(global as any).window.vibepass = original.vibepass
+    ;(global as any).window.cloudpass = original.cloudpass
   })
 
   test('uses modern navigator.clipboard when available', async () => {

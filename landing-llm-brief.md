@@ -1,7 +1,7 @@
-## Landing Page Creator LLM — Brief for VibePass
+## Landing Page Creator LLM — Brief for cloudpass.dev
 
 Goal
-Create a single‑screen product landing page for VibePass that communicates a self‑hosted, enterprise‑grade password manager alternative to 1Password. The page should feel modern, clean, and fast, with a dark/light theme preview. Support both LTR and RTL layouts.
+Create a single‑screen product landing page for cloudpass.dev that communicates a self‑hosted, enterprise‑grade password manager alternative to 1Password. The page should feel modern, clean, and fast, with a dark/light theme preview. Support both LTR and RTL layouts.
 
 Audience
 - AWS teams who want complete control over their password management infrastructure
@@ -9,7 +9,7 @@ Audience
 - Security‑conscious teams who prefer self‑hosted solutions over third‑party services
 
 Core Message
-- VibePass is your own‑cloud alternative to 1Password. Deploy on your AWS infrastructure for 100% control, radical cost savings, and enterprise‑grade security without vendor lock‑in or third‑party breaches.
+- cloudpass.dev is your own‑cloud alternative to 1Password. Deploy on your AWS infrastructure for 100% control, radical cost savings, and enterprise‑grade security without vendor lock‑in or third‑party breaches.
 
 Tone and Style
 - Authoritative, security‑focused, enterprise‑ready
@@ -19,12 +19,12 @@ Tone and Style
 Sections (content to be provided directly in copy)
 1) Hero
    - Headline: "Your Own‑Cloud Alternative to 1Password"
-   - Subheadline: "Deploy VibePass on your AWS infrastructure. 100% control, massive cost savings, zero third‑party risk."
+   - Subheadline: "Deploy cloudpass.dev on your AWS infrastructure. 100% control, massive cost savings, zero third‑party risk."
    - Primary CTA: "Download Desktop App"
    - Secondary CTA: "Deploy on AWS"
-   - Visual: Split comparison showing 1Password (SaaS) vs VibePass (your AWS)
+   - Visual: Split comparison showing 1Password (SaaS) vs CloudPass (your AWS)
 
-2) Why Teams Choose VibePass Over 1Password
+2) Why Teams Choose cloudpass.dev Over 1Password
    - Comparison table or grid:
      - "Your AWS account vs Their servers"
      - "~$0.50/user/month vs $8‑15/user/month"
@@ -59,7 +59,7 @@ Sections (content to be provided directly in copy)
    - Simple cost calculator section:
      - "Calculate Your Savings"
      - "1Password Business: $8/user/month"
-     - "VibePass + AWS: ~$0.50/user/month"
+     - "cloudpass.dev + AWS: ~$0.50/user/month"
      - "Save 93%+ annually"
      - "Use your existing AWS credits"
 
@@ -81,7 +81,7 @@ Requirements for the LLM output
 - Emphasize enterprise/AWS branding colors and professional appearance
 
 SEO
-- Title: "VibePass: Self‑Hosted 1Password Alternative for AWS Teams"
+- Title: "cloudpass.dev: Self‑Hosted 1Password Alternative for AWS Teams"
 - Description: "Deploy your own password manager on AWS. 95%+ cost savings, 100% control, zero third‑party risk. Enterprise alternative to 1Password."
 - Social image placeholder and Open Graph tags
 

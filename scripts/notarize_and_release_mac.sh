@@ -51,9 +51,9 @@ echo "Step 5/5: Validating stapled DMG"
 xcrun stapler validate -v "$DMG_PATH"
 
 # Optional: Gatekeeper assessment of the app inside the DMG
-MOUNT_DIR=$(mktemp -d -t vibepass_dmg_mount)
+MOUNT_DIR=$(mktemp -d -t cloudpass_dmg_mount)
 if hdiutil attach -nobrowse -mountpoint "$MOUNT_DIR" "$DMG_PATH" >/dev/null 2>&1; then
-  APP_INSIDE="$MOUNT_DIR/VibePass.app"
+  APP_INSIDE="$MOUNT_DIR/cloudpass.dev.app"
   if [[ -d "$APP_INSIDE" ]]; then
     echo "Gatekeeper assessment of app inside DMG: $APP_INSIDE"
     spctl -a -vv "$APP_INSIDE" || true

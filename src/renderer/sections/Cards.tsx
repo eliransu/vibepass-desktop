@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../shared/store'
 import { useListQuery, useCreateMutation, useRemoveMutation, useUpdateMutation, type VaultItem } from '../services/vaultApi'
 import { MasterGate } from '../features/security/MasterGate'
 import { useTranslation } from 'react-i18next'
-import { setSelectedItemId, setSearchQuery } from '../features/ui/uiSlice'
+import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/ui/uiSlice'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
@@ -22,7 +22,7 @@ function Content(): React.JSX.Element {
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
-  const { data, isFetching } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
+  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
   const isSsoMissingOrExpired = !awsAccountId
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
@@ -46,6 +46,20 @@ function Content(): React.JSX.Element {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const clearAwsAccountContext = useCallback(() => {
+    try { localStorage.removeItem('awsAccountId') } catch {}
+    try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+    try { dispatch(setAwsAccountId('')) } catch {}
+  }, [dispatch])
+
+  useEffect(() => {
+    if (!error) return
+    const msg = String((error as any)?.error ?? (error as any)?.data?.error ?? (error as any)?.message ?? '')
+    if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
+      clearAwsAccountContext()
+    }
+  }, [error, clearAwsAccountContext])
 
   function formatCardNumber(value: string): string {
     const digitsOnly = (value || '').replace(/\D/g, '').slice(0, 19)
@@ -75,8 +89,8 @@ function Content(): React.JSX.Element {
     const onUp = () => {
       setIsResizing(false)
       localStorage.setItem('listPaneWidth', String(listWidth))
-      if ((window as any).vibepass?.storeSet) {
-        void (window as any).vibepass.storeSet('listPaneWidth', String(listWidth))
+      if ((window as any).cloudpass?.storeSet) {
+        void (window as any).cloudpass.storeSet('listPaneWidth', String(listWidth))
       }
       document.body.style.cursor = ''
       ;(document.body.style as any).userSelect = ''
@@ -126,16 +140,17 @@ function Content(): React.JSX.Element {
     try {
       setIsSubmitting(true)
       if (editingCard) {
-        const pr: any = updateItem({ uid, key, item: { ...item, id: editingCard.id }, selectedVaultId })
+        const pr: any = updateItem({ uid, key, item: { ...item, id: editingCard.id }, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
         await (pr?.unwrap ? pr.unwrap() : pr)
       } else {
-        const pr: any = createItem({ uid, key, item, selectedVaultId })
+        const pr: any = createItem({ uid, key, item, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
         await (pr?.unwrap ? pr.unwrap() : pr)
       }
       resetForm()
     } catch (e: any) {
       const msg = String(e?.data?.error ?? e?.error ?? e?.message ?? '')
       if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
+        clearAwsAccountContext()
         alert((t('team.ssoExpiredInline') as string))
       } else {
         alert((t('team.createFailed') as string))
@@ -181,7 +196,7 @@ function Content(): React.JSX.Element {
       try {
         setIsDeleting(true)
         {
-          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId })
+          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
           await (pr?.unwrap ? pr.unwrap() : pr)
         }
         setDeleteConfirm({isOpen: false, item: null})
@@ -191,6 +206,7 @@ function Content(): React.JSX.Element {
       } catch (e: any) {
         const msg = String(e?.data?.error ?? e?.error ?? e?.message ?? '')
         if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
+          clearAwsAccountContext()
           alert((t('team.ssoExpiredInline') as string))
         } else {
           alert((t('team.listFailed') as string))
@@ -202,9 +218,9 @@ function Content(): React.JSX.Element {
   }
 
   return (
-    <div className="h-full flex" ref={containerRef}>
+    <div className="h-full min-h-0 flex" ref={containerRef}>
       {/* Items list */}
-      <div className="bg-card border-r border-border flex flex-col" style={{ width: listWidth }}>
+      <div className="bg-card border-r border-border flex flex-col min-h-0" style={{ width: listWidth }}>
         {/* Header */}
         <div className="p-6 border-b border-border">
           <div className="flex items-center justify-between mb-4">

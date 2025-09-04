@@ -45,10 +45,10 @@ describe('vaultPaths utilities', () => {
 
   test('getVaultSecretNameWithOverrides encodes region/tenant/account', () => {
     const name = getVaultSecretNameWithOverrides({ uid: 'u1', selectedVaultId: 'personal', email: 'u@acme.io', regionOverride: 'eu-west-1', accountIdOverride: '999999999999' })
-    expect(name).toBe('vibepass/acme.io/999999999999/eu-west-1/u1/personal/vault')
+    expect(name).toBe('cloudpass.dev/acme.io/999999999999/eu-west-1/u1/personal/vault')
 
     const team = getVaultSecretNameWithOverrides({ uid: 'u1', selectedVaultId: 'work', email: 'u@acme.io', regionOverride: 'eu-west-1', accountIdOverride: '999999999999' })
-    expect(team).toBe('vibepass/acme.io/999999999999/eu-west-1/team/vault')
+    expect(team).toBe('cloudpass.dev/acme.io/999999999999/eu-west-1/team/vault')
   })
 })
 

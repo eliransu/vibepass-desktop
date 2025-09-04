@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 interface Toast {
   id: string
@@ -42,46 +43,47 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      
-      {/* Toast container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {toasts.map(toast => (
-          <div
-            key={toast.id}
-            className={`
-              animate-slide-in-right px-4 py-3 rounded-lg shadow-lg border max-w-sm
-              ${toast.type === 'success' 
-                ? 'bg-success/10 border-success/20 text-success' 
-                : toast.type === 'error'
-                ? 'bg-destructive/10 border-destructive/20 text-destructive'
-                : 'bg-muted border-border text-foreground'
-              }
-            `}
-          >
-            <div className="flex items-center gap-2">
-              {toast.type === 'success' && (
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              {toast.type === 'error' && (
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              )}
-              <span className="text-sm font-medium">{toast.message}</span>
-              <button
-                onClick={() => removeToast(toast.id)}
-                className="ml-auto text-current hover:opacity-70 transition-opacity"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {typeof document !== 'undefined' && createPortal(
+        <div className="fixed top-4 right-4 z-[9999] space-y-2 pointer-events-none">
+          {toasts.map(toast => (
+            <div
+              key={toast.id}
+              className={`
+                pointer-events-auto animate-slide-in-right px-4 py-3 rounded-lg shadow-lg border max-w-sm bg-background
+                ${toast.type === 'success' 
+                  ? 'border-success/30 text-success' 
+                  : toast.type === 'error'
+                  ? 'border-destructive/30 text-destructive'
+                  : 'border-border text-foreground'
+                }
+              `}
+            >
+              <div className="flex items-center gap-2">
+                {toast.type === 'success' && (
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                {toast.type === 'error' && (
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                )}
+                <span className="text-sm font-medium">{toast.message}</span>
+                <button
+                  onClick={() => removeToast(toast.id)}
+                  className="ml-auto text-current hover:opacity-70 transition-opacity"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </ToastContext.Provider>
   )
 }
