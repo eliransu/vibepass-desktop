@@ -9,6 +9,7 @@ import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
+import { Icon } from '../components/ui/icon'
 import { copyWithFeedback } from '../lib/clipboard'
 import { useSafeToast } from '../hooks/useSafeToast'
 
@@ -197,16 +198,12 @@ function Content(): React.JSX.Element {
               title={t('actions.add')}
               onClick={() => setShowCreateForm(true)}
             >
-              <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon name="plus" size={16} className="text-primary-foreground" />
             </button>
           </div>
           
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Icon name="search" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
             <Input 
               placeholder={t('search.placeholder') as string} 
               value={search} 
@@ -246,9 +243,7 @@ function Content(): React.JSX.Element {
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       selectedId === it.id ? 'bg-primary text-primary-foreground' : 'bg-muted'
                     }`}>
-                      <svg className="w-[10.35px] h-[10.35px]" viewBox="0 0 18 18" fill="currentColor">
-                        <path d="M17.408 3.412a1.974 1.974 0 0 0 0-2.82 1.973 1.973 0 0 0-2.819 0l-.29.29-.59-.59a1.009 1.009 0 0 0-1.65.35l-.35-.35a1.004 1.004 0 1 0-1.42 1.42l.35.35a1.033 1.033 0 0 0-.58.58l-.35-.35a1.004 1.004 0 0 0-1.42 1.42L9.879 5.3l-3.02 3.01c-.01.01-.02.03-.03.04A4.885 4.885 0 0 0 5 8a5 5 0 1 0 5 5 4.885 4.885 0 0 0-.35-1.83c.01-.01.03-.02.04-.03l7.718-7.728zM5 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor" fillRule="evenodd"/>
-                      </svg>
+                      <Icon name="key" size={10} />
                     </div>
                   </div>
                   
@@ -288,9 +283,7 @@ function Content(): React.JSX.Element {
                   {editingItem ? t('actions.editApiKey') : t('actions.addApiKey')}
                 </h2>
                 <Button variant="ghost" onClick={resetForm}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="x" size={16} />
                 </Button>
               </div>
             </div>
@@ -365,9 +358,7 @@ function Content(): React.JSX.Element {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-                        <svg className="w-[10.35px] h-[10.35px] text-primary-foreground" viewBox="0 0 18 18" fill="currentColor">
-                          <path d="M17.408 3.412a1.974 1.974 0 0 0 0-2.82 1.973 1.973 0 0 0-2.819 0l-.29.29-.59-.59a1.009 1.009 0 0 0-1.65.35l-.35-.35a1.004 1.004 0 1 0-1.42 1.42l.35.35a1.033 1.033 0 0 0-.58.58l-.35-.35a1.004 1.004 0 0 0-1.42 1.42L9.879 5.3l-3.02 3.01c-.01.01-.02.03-.03.04A4.885 4.885 0 0 0 5 8a5 5 0 1 0 5 5 4.885 4.885 0 0 0-.35-1.83c.01-.01.03-.02.04-.03l7.718-7.728zM5 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor" fillRule="evenodd"/>
-                        </svg>
+                        <Icon name="key" size={10} className="text-primary-foreground" />
                       </div>
                       <div>
                         <h2 className="text-xl font-semibold text-foreground">{it.title}</h2>
@@ -441,9 +432,7 @@ function Content(): React.JSX.Element {
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-[20.7px] h-[20.7px] text-muted-foreground" viewBox="0 0 18 18" fill="currentColor">
-                  <path d="M17.408 3.412a1.974 1.974 0 0 0 0-2.82 1.973 1.973 0 0 0-2.819 0l-.29.29-.59-.59a1.009 1.009 0 0 0-1.65.35l-.35-.35a1.004 1.004 0 1 0-1.42 1.42l.35.35a1.033 1.033 0 0 0-.58.58l-.35-.35a1.004 1.004 0 0 0-1.42 1.42L9.879 5.3l-3.02 3.01c-.01.01-.02.03-.03.04A4.885 4.885 0 0 0 5 8a5 5 0 1 0 5 5 4.885 4.885 0 0 0-.35-1.83c.01-.01.03-.02.04-.03l7.718-7.728zM5 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor" fillRule="evenodd"/>
-                </svg>
+                <Icon name="key" size={20} className="text-muted-foreground" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">{t('search.select')}</h3>
               <p className="text-sm text-muted-foreground max-w-sm">

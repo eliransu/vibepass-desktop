@@ -24,22 +24,28 @@ module.exports = {
                     DEFAULT: "hsl(var(--primary))",
                     foreground: "hsl(var(--primary-foreground))",
                     hover: "hsl(var(--primary-hover))",
+                    light: "hsl(var(--primary-light))",
+                    border: "hsl(var(--primary-border))",
                 },
                 secondary: {
                     DEFAULT: "hsl(var(--secondary))",
                     foreground: "hsl(var(--secondary-foreground))",
+                    hover: "hsl(var(--secondary-hover))",
                 },
                 destructive: {
                     DEFAULT: "hsl(var(--destructive))",
                     foreground: "hsl(var(--destructive-foreground))",
+                    light: "hsl(var(--destructive-light))",
                 },
                 success: {
                     DEFAULT: "hsl(var(--success))",
                     foreground: "hsl(var(--success-foreground))",
+                    light: "hsl(var(--success-light))",
                 },
                 warning: {
                     DEFAULT: "hsl(var(--warning))",
                     foreground: "hsl(var(--warning-foreground))",
+                    light: "hsl(var(--warning-light))",
                 },
                 muted: {
                     DEFAULT: "hsl(var(--muted))",
@@ -48,6 +54,7 @@ module.exports = {
                 accent: {
                     DEFAULT: "hsl(var(--accent))",
                     foreground: "hsl(var(--accent-foreground))",
+                    hover: "hsl(var(--accent-hover))",
                 },
                 popover: {
                     DEFAULT: "hsl(var(--popover))",
@@ -65,10 +72,23 @@ module.exports = {
                 },
             },
             boxShadow: {
+                'xs': 'var(--shadow-xs)',
                 'sm': 'var(--shadow-sm)',
                 'DEFAULT': 'var(--shadow)',
                 'md': 'var(--shadow-md)',
                 'lg': 'var(--shadow-lg)',
+                'xl': 'var(--shadow-xl)',
+            },
+            backgroundImage: {
+                'gradient-primary': 'var(--gradient-primary)',
+                'gradient-surface': 'var(--gradient-surface)',
+            },
+            fontFamily: {
+                sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"Inter"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+            },
+            letterSpacing: {
+                tighter: '-0.02em',
+                tight: '-0.01em',
             },
             borderRadius: {
                 lg: "var(--radius)",

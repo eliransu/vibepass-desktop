@@ -8,8 +8,8 @@ import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { marked } from 'marked'
+import { Icon } from '../components/ui/icon'
 import DOMPurify from 'dompurify'
-
 function Content(): React.JSX.Element {
   const { t } = useTranslation()
   const dispatch = useDispatch()
@@ -157,16 +157,12 @@ function Content(): React.JSX.Element {
               title={t('actions.add')}
               onClick={() => setShowCreateForm(true)}
             >
-              <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon name="plus" size={16} className="text-primary-foreground" />
             </button>
           </div>
           
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Icon name="search" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
             <Input 
               placeholder={t('search.placeholder') as string} 
               value={search} 
@@ -206,9 +202,7 @@ function Content(): React.JSX.Element {
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       selectedId === note.id ? 'bg-primary text-primary-foreground' : 'bg-muted'
                     }`}>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                      <Icon name="file-text" size={16} />
                     </div>
                   </div>
                   
@@ -250,9 +244,7 @@ function Content(): React.JSX.Element {
                   {editingNote ? t('actions.editNote') : t('actions.addNote')}
                 </h2>
                 <Button variant="ghost" onClick={resetForm}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="x" size={16} />
                 </Button>
               </div>
             </div>
@@ -330,9 +322,7 @@ function Content(): React.JSX.Element {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-                        <svg className="w-6 h-6 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
+                          <Icon name="file-text" size={16} className="text-primary-foreground" />
                       </div>
                       <div>
                         <h2 className="text-xl font-semibold text-foreground">{note.title}</h2>
@@ -401,9 +391,7 @@ function Content(): React.JSX.Element {
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                <Icon name="file-text" size={16} className="text-muted-foreground" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">{t('search.select')}</h3>
               <p className="text-sm text-muted-foreground max-w-sm">

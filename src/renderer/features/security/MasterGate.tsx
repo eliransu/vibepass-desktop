@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
 import { setMasterKey, setUnlocking } from './masterKeySlice'
 import CryptoJS from 'crypto-js'
 import { deriveKeyFromMasterPassword } from '../../../shared/security/crypto'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '../../components/ui/icon'
 
 const VERIFIER_PLAINTEXT = 'cloudpass.com.VerifierV1'
 
@@ -42,7 +43,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     return password.length < 1
   }, [hasSetup, password, confirm])
 
-  async function tryBiometricUnlock(): Promise<void> {
+  const tryBiometricUnlock = useCallback(async (): Promise<void> => {
     try {
       setBiometricLoading(true)
       setError(null)
@@ -62,7 +63,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
             // Add a delay to show the unlock animation
             setTimeout(() => {
               dispatch(setMasterKey(key))
-            }, 1500)
+            }, 1800)
             return
           } else {
             setError(t('master.biometric.invalid'))
@@ -78,7 +79,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     } finally {
       setBiometricLoading(false)
     }
-  }
+  }, [t, dispatch])
 
   // Auto-prompt biometric by default once, then fall back to password if cancelled/closed
   useEffect(() => {
@@ -86,7 +87,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
       setAttemptedBiometric(true)
       void tryBiometricUnlock()
     }
-  }, [attemptedBiometric, hasSetup, biometricAvailable, masterKey])
+  }, [attemptedBiometric, hasSetup, biometricAvailable, masterKey, tryBiometricUnlock])
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -112,7 +113,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
         // Add a delay to show the unlock animation
         setTimeout(() => {
           dispatch(setMasterKey(key))
-        }, 1500)
+        }, 1800)
         return
       }
       // Login
@@ -135,7 +136,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
       // Add a delay to show the unlock animation
       setTimeout(() => {
         dispatch(setMasterKey(key))
-      }, 1500)
+      }, 1800)
     } catch (err: any) {
       setError(err?.message ?? 'Error')
     }
@@ -148,17 +149,16 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     return (
       <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-br from-primary/5 to-primary/10">
         <div className="text-center">
-          <div className="relative mb-8">
-            {/* Outer expanding ring */}
-            <div className="absolute inset-0 w-24 h-24 mx-auto rounded-full border-4 border-primary/20 animate-ping"></div>
-            {/* Middle ring */}
-            <div className="absolute inset-2 w-20 h-20 mx-auto rounded-full border-2 border-primary/40 animate-pulse delay-150"></div>
-            {/* Inner icon */}
-            <div className="relative w-24 h-24 mx-auto bg-primary rounded-full flex items-center justify-center animate-bounce">
-              <svg className="w-12 h-12 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-              </svg>
-            </div>
+          <div className="mb-8">
+            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+            {/* @ts-ignore */}
+            <dotlottie-wc
+  src="https://lottie.host/1638b574-0e3e-4af8-85a7-b85b1880ec0d/PFlyhucFJ0.lottie"
+  autoplay="true"
+              loop="true"
+              speed="2.5"
+              style={{ width: '140px', height: '140px' }}
+            />
           </div>
           <div className="text-lg font-semibold text-primary animate-pulse mb-2">
             {t('master.unlocking')}
@@ -178,9 +178,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
           {biometricLoading ? (
             <div className="relative mb-6">
               <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center animate-pulse">
-                <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+                <Icon name="lock" size={32} className="text-primary" />
               </div>
               <div className="text-sm font-medium text-primary mb-2">
                 {t('master.biometric.prompt')}
@@ -190,6 +188,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
               </div>
             </div>
           ) : (
+            
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
           )}
           <div className="text-sm text-muted-foreground">
@@ -204,14 +203,14 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md border rounded-2xl shadow-xl bg-background">
         <div className="flex justify-center py-8">
-          {/* eslint-disable-next-line */}
+          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
           {/* @ts-ignore */}
-          <dotlottie-player
+          <dotlottie-wc
             src="https://lottie.host/6475dcd7-35cf-4d93-ac92-01268a2bea4b/3XzoO49bNF.lottie"
-            autoplay
-            loop
-            background="transparent"
-            style={{ width: 112, height: 112 }}
+            autoplay="true"
+            loop="true"
+            speed="1"
+            style={{ width: '112px', height: '112px' }}
           />
         </div>
         <form onSubmit={handleSubmit} className="px-6 pb-8 space-y-4">
@@ -238,9 +237,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
                 disabled={biometricLoading}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+                <Icon name="fingerprint" size={16} />
                 {biometricAvailable ? (biometricLoading ? t('master.biometric.unlocking') : t('master.biometric.unlock')) : t('master.biometric.invalid')}
               </button>
             )}

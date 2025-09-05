@@ -13,6 +13,7 @@ import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
+import { Icon } from '../components/ui/icon'
 import { copyWithFeedback } from '../lib/clipboard'
 import { useSafeToast } from '../hooks/useSafeToast'
 
@@ -645,16 +646,12 @@ function Content(): React.JSX.Element {
               title={t('actions.add')}
               onClick={() => setShowCreateForm(true)}
             >
-              <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon name="plus" size={16} className="text-primary-foreground" />
             </button>
           </div>
           
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Icon name="search" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
             <Input 
               placeholder={t('search.placeholder') as string} 
               value={search} 
@@ -694,9 +691,7 @@ function Content(): React.JSX.Element {
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                       selectedId === p.id ? 'bg-primary text-primary-foreground' : 'bg-muted'
                     }`}>
-                      <svg className="w-[12.42px] h-[12.42px] flex-shrink-0" viewBox="0 0 21.6 21.6" fill="currentColor">
-                    <path d="M16.2 9V7.2a5.4 5.4 0 1 0-10.8 0V9H3.6A1.8 1.8 0 0 0 1.8 10.8v7.2A1.8 1.8 0 0 0 3.6 19.8h14.4a1.8 1.8 0 0 0 1.8-1.8v-7.2A1.8 1.8 0 0 0 18 9h-1.8zm-9-1.8a3.6 3.6 0 1 1 7.2 0V9h-7.2V7.2zm10.8 10.8H3.6v-7.2h14.4v7.2zm-7.2-3.6a1.8 1.8 0 1 1 3.6 0 1.8 1.8 0 0 1-3.6 0z" fill="currentColor" />
-                  </svg>
+                      <Icon name="lock" size={12} className="flex-shrink-0" />
                     </div>
                   </div>
                   
@@ -745,9 +740,7 @@ function Content(): React.JSX.Element {
                   {editingPassword ? t('actions.editPassword') : t('actions.addPassword')}
                 </h2>
                 <Button variant="ghost" onClick={resetForm}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <Icon name="x" size={16} />
                 </Button>
               </div>
             </div>
@@ -813,14 +806,9 @@ function Content(): React.JSX.Element {
                         title={showPassword ? 'Hide' : 'View'}
                       >
                         {showPassword ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9-4-9-7 0-1.068.402-2.26 1.125-3.425m3.11-2.861A9.956 9.956 0 0112 5c5 0 9 4 9 7 0 1.03-.39 2.19-1.086 3.332M3 3l18 18" />
-                          </svg>
+                          <Icon name="eye-off" size={16} />
                         ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                          </svg>
+                          <Icon name="eye" size={16} />
                         )}
                       </Button>
                       <Button 
@@ -833,9 +821,7 @@ function Content(): React.JSX.Element {
                         }}
                         title={t('actions.generatePassword')}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
+                        <Icon name="rotate-ccw" size={16} />        
                       </Button>
                       {/* Scan QR moved near Title */}
                     </div>
@@ -899,9 +885,7 @@ function Content(): React.JSX.Element {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-                      <svg className="w-[12.42px] h-[12.42px] flex-shrink-0" viewBox="0 0 21.6 21.6" fill="currentColor">
-                    <path d="M16.2 9V7.2a5.4 5.4 0 1 0-10.8 0V9H3.6A1.8 1.8 0 0 0 1.8 10.8v7.2A1.8 1.8 0 0 0 3.6 19.8h14.4a1.8 1.8 0 0 0 1.8-1.8v-7.2A1.8 1.8 0 0 0 18 9h-1.8zm-9-1.8a3.6 3.6 0 1 1 7.2 0V9h-7.2V7.2zm10.8 10.8H3.6v-7.2h14.4v7.2zm-7.2-3.6a1.8 1.8 0 1 1 3.6 0 1.8 1.8 0 0 1-3.6 0z" fill="currentColor" />
-                  </svg>
+                      <Icon name="lock" size={12} className="flex-shrink-0" />
                       </div>
                       <div>
                         <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
@@ -972,18 +956,13 @@ function Content(): React.JSX.Element {
                         <button 
                           className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground"
                           onClick={() => setShowPassword(!showPassword)}
-                        >
+                                              >
                         {showPassword ? (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9-4-9-7 0-1.068.402-2.26 1.125-3.425m3.11-2.861A9.956 9.956 0 0112 5c5 0 9 4 9 7 0 1.03-.39 2.19-1.086 3.332M3 3l18 18" />
-                          </svg>
+                          <Icon name="eye-off" size={16} />
                         ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            <circle cx="12" cy="12" r="3" strokeWidth={2} />
-                          </svg>
+                          <Icon name="eye" size={16} />
                         )}
-                        </button>
+                      </button>
                         <button 
                           className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground"
                           onClick={async () => {
@@ -1021,10 +1000,7 @@ function Content(): React.JSX.Element {
                           }}
                           title={t('actions.copy')}
                         >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth={2} />
-                          <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
-                        </svg>
+                        <Icon name="copy" size={16} />
                         </button>
                       </div>
                     </div>
@@ -1058,9 +1034,7 @@ function Content(): React.JSX.Element {
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-[12.42px] h-[12.42px] flex-shrink-0" viewBox="0 0 21.6 21.6" fill="currentColor">
-                    <path d="M16.2 9V7.2a5.4 5.4 0 1 0-10.8 0V9H3.6A1.8 1.8 0 0 0 1.8 10.8v7.2A1.8 1.8 0 0 0 3.6 19.8h14.4a1.8 1.8 0 0 0 1.8-1.8v-7.2A1.8 1.8 0 0 0 18 9h-1.8zm-9-1.8a3.6 3.6 0 1 1 7.2 0V9h-7.2V7.2zm10.8 10.8H3.6v-7.2h14.4v7.2zm-7.2-3.6a1.8 1.8 0 1 1 3.6 0 1.8 1.8 0 0 1-3.6 0z" fill="currentColor" />
-                  </svg>
+              <Icon name="lock" size={12} className="flex-shrink-0" />
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">{t('search.select')}</h3>
               <p className="text-sm text-muted-foreground max-w-sm">

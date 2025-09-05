@@ -42,14 +42,16 @@ declare global {
     }
     namespace JSX {
       interface IntrinsicElements {
-        'dotlottie-player': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        'dotlottie-wc': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
           src?: string
-          autoplay?: boolean
-          loop?: boolean
-          background?: string
-          speed?: number
-          controls?: boolean
-          mode?: 'normal' | 'bounce'
+          autoplay?: boolean | string
+          loop?: boolean | string
+          speed?: number | string
+          data?: string
+          segment?: string
+          mode?: string
+          'background-color'?: string
+          'render-config'?: string
           style?: React.CSSProperties
         }
       }

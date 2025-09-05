@@ -360,30 +360,41 @@ ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretS
 ipcMain.handle('aws:get-profiles', async () => {
   try {
     const awsConfigPath = path.join(os.homedir(), '.aws', 'config')
-    
+
     if (!fs.existsSync(awsConfigPath)) {
-      return { default: 'Default' }
+      return "no_cloudpass_account"
     }
-    
+
     const configContent = fs.readFileSync(awsConfigPath, 'utf-8')
-    const profiles: Record<string, string> = { default: 'Default' }
-    
+    const profiles: Record<string, string> = {}
+    let foundCloudpass = false
+
     // Parse AWS config file for profiles
     const lines = configContent.split('\n')
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed.startsWith('[profile ')) {
         const profileName = trimmed.substring('[profile '.length, trimmed.length - 1)
-        profiles[profileName] = profileName
+        if (profileName.toLowerCase().includes('cloudpass')) {
+          profiles[profileName] = profileName
+          foundCloudpass = true
+        }
       } else if (trimmed === '[default]') {
-        profiles.default = 'Default'
+        if ('default'.includes('cloudpass')) {
+          profiles.default = 'Default'
+          foundCloudpass = true
+        }
       }
     }
-    
+
+    if (!foundCloudpass || Object.keys(profiles).length === 0) {
+      return "no_cloudpass_account"
+    }
+
     return profiles
   } catch (error) {
     console.error('Failed to read AWS profiles:', error)
-    return { default: 'Default' }
+    return "no_cloudpass_account"
   }
 })
 

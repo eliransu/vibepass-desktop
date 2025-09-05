@@ -48,6 +48,8 @@ const resources = {
         configurationError: 'Configuration Error',
         or: 'or',
         secureNote: 'Your data is encrypted and secure',
+        awsProfileError: 'AWS Profile Configuration Error',
+        noCloudpassProfile: 'No CloudPass AWS profile was found in your AWS configuration. Please contact your administrator or ensure that a CloudPass profile has been properly configured in your AWS config file (~/.aws/config).',
       },
       vault: {
         title: 'Your Vault',
@@ -96,6 +98,7 @@ const resources = {
         open: 'Open',
         generatePassword: 'Generate Password',
         copied: 'Copied',
+        close: 'Close',
       },
       otp: {
         refreshIn: 'refresh in {{seconds}}s',
@@ -204,6 +207,8 @@ const resources = {
         configurationError: 'שגיאת הגדרה',
         or: 'או',
         secureNote: 'המידע שלכם מוצפן ומאובטח',
+        awsProfileError: 'שגיאת הגדרת פרופיל AWS',
+        noCloudpassProfile: 'לא נמצא פרופיל CloudPass AWS בהגדרות ה-AWS שלכם. אנא פנו למנהל המערכת או וודאו שפרופיל CloudPass הוגדר כראוי בקובץ ההגדרות AWS (~/.aws/config).',
       },
       vault: {
         title: 'הכספת שלך',
@@ -252,6 +257,7 @@ const resources = {
         open: 'פתח',
         generatePassword: 'צור סיסמה',
         copied: 'הועתק',
+        close: 'סגור',
       },
       otp: {
         refreshIn: 'יתעדכן בעוד {{seconds}} שנ׳',
