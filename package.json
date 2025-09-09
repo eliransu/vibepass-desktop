@@ -90,12 +90,16 @@
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.864.0",
+    "@aws-sdk/client-sso": "^3.883.0",
+    "@aws-sdk/client-sso-oidc": "^3.883.0",
+    "@aws-sdk/client-sts": "^3.883.0",
     "@aws-sdk/credential-providers": "^3.864.0",
     "@lottiefiles/dotlottie-wc": "^0.7.2",
     "@otplib/plugin-crypto-js": "^12.0.1",
     "@radix-ui/react-slot": "^1.2.3",
     "@reduxjs/toolkit": "^2.8.2",
     "@zxing/library": "^0.21.3",
+    "ace-builds": "^1.43.3",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "crypto-js": "^4.2.0",
@@ -111,6 +115,7 @@
     "marked": "^16.2.1",
     "otplib": "^12.0.1",
     "react": "^19.1.1",
+    "react-ace": "^14.0.1",
     "react-dom": "^19.1.1",
     "react-i18next": "^15.6.1",
     "react-markdown": "^10.1.0",
@@ -118,8 +123,7 @@
     "react-router-dom": "^7.8.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
-    "uuid": "^11.1.0",
-    "zod": "^4.0.16"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

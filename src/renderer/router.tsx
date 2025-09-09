@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { createHashRouter, RouterProvider, Navigate, Outlet, useNavigate, useRouteError } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { store } from '../shared/store'
@@ -8,6 +8,8 @@ import { MasterGate } from './features/security/MasterGate'
 import { useDispatch } from 'react-redux'
 import { setUser } from './features/auth/authSlice'
 import { Icon } from './components/ui/icon'
+import { useSafeToast } from './hooks/useSafeToast'
+import { useTranslation } from 'react-i18next'
 
 // Firebase auth removed: gate app by Master password instead
 
@@ -66,7 +68,7 @@ export function AppRouter(): React.JSX.Element {
   function WithAuth(): React.JSX.Element {
     const dispatch = useDispatch()
     React.useEffect(() => {
-      // Always resolve from OS; never reuse cached local user
+      // Always resolve from AWS STS; never reuse cached local user
       const preload = (window as any).cloudpass as any
       const applyUser = (user: any | null) => {
         if (user && user.uid) {
@@ -77,16 +79,16 @@ export function AppRouter(): React.JSX.Element {
           dispatch(setUser(null))
         }
       }
-      if (preload && typeof preload.getOsUsername === 'function') {
-        preload.getOsUsername().then((uname: string) => {
-          const username = (uname || '').trim()
+      if (preload && typeof preload.getAwsUserIdentity === 'function') {
+        preload.getAwsUserIdentity().then((userId: string) => {
+          const username = (userId || '').trim()
           if (username.length === 0) {
             applyUser(null)
             return
           }
           applyUser({
             uid: username,
-            email: `${username}@cloudpass.local`,
+            email: `${username}@cloudpass.aws`,
             displayName: username,
             photoURL: ''
           })
@@ -99,6 +101,7 @@ export function AppRouter(): React.JSX.Element {
     }, [dispatch])
     return (
       <ToastProvider>
+        <VaultErrorHandler />
         <RouterProvider router={router} />
       </ToastProvider>
     )
@@ -108,6 +111,29 @@ export function AppRouter(): React.JSX.Element {
       <WithAuth />
     </Provider>
   )
+}
+
+function VaultErrorHandler(): React.JSX.Element {
+  const { showToast } = useSafeToast()
+  const { t } = useTranslation()
+
+  useEffect(() => {
+    function handleVaultAccessDenied(event: CustomEvent) {
+      const { message, secretName } = event.detail
+      console.log('🚫 Received vault-access-denied event:', { message, secretName })
+      showToast(`${t('errors.vaultAccessDenied')}: ${t('errors.vaultAccessDeniedDescription')}`, 'error')
+      console.error('🚫 Vault access denied for:', secretName, '-', message)
+    }
+
+    console.log('🔧 Setting up vault-access-denied event listener')
+    window.addEventListener('vault-access-denied', handleVaultAccessDenied as EventListener)
+    return () => {
+      console.log('🔧 Removing vault-access-denied event listener')
+      window.removeEventListener('vault-access-denied', handleVaultAccessDenied as EventListener)
+    }
+  }, [showToast, t])
+
+  return <></>
 }
 
 

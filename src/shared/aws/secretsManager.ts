@@ -1,13 +1,49 @@
 import { SecretsManagerClient, GetSecretValueCommand, CreateSecretCommand, PutSecretValueCommand, DeleteSecretCommand, ListSecretsCommand, type SecretListEntry } from '@aws-sdk/client-secrets-manager'
 import { fromSSO } from '@aws-sdk/credential-providers'
 
-export function createSecretsClient(region: string): SecretsManagerClient {
-  if (!process.env.AWS_SDK_LOAD_CONFIG) {
-    process.env.AWS_SDK_LOAD_CONFIG = '1'
+export type CloudPassConfig = {
+  type: 'sso' | 'keys'
+  // Common
+  region?: string
+  accountId?: string
+  team?: string
+  department?: string
+  // SSO configuration (explicit, no ~/.aws/config)
+  ssoStartUrl?: string
+  ssoRegion?: string
+  ssoAccountId?: string
+  ssoRoleName?: string
+  // Static keys (optional session)
+  accessKeyId?: string
+  secretAccessKey?: string
+  sessionToken?: string
+}
+
+export function createSecretsClient(region: string, auth?: CloudPassConfig | null): SecretsManagerClient {
+  // Prefer explicit credentials/config and avoid any OS-based providers
+  if (auth && auth.type === 'keys' && auth.accessKeyId && auth.secretAccessKey) {
+    return new SecretsManagerClient({
+      region,
+      credentials: {
+        accessKeyId: String(auth.accessKeyId),
+        secretAccessKey: String(auth.secretAccessKey),
+        sessionToken: auth.sessionToken ? String(auth.sessionToken) : undefined,
+      },
+    })
   }
-  if (!process.env.HOME || process.env.HOME.trim().length === 0) {
+  if (auth && auth.type === 'sso' && auth.ssoStartUrl && auth.ssoRegion && auth.ssoAccountId && auth.ssoRoleName) {
+    return new SecretsManagerClient({
+      region,
+      credentials: fromSSO({
+        startUrl: String(auth.ssoStartUrl),
+        region: String(auth.ssoRegion),
+        accountId: String(auth.ssoAccountId),
+        roleName: String(auth.ssoRoleName),
+      } as any),
+    })
   }
-  return new SecretsManagerClient({ region, credentials: fromSSO({}) })
+  // As a last resort, construct a client without credentials (will fail fast)
+  return new SecretsManagerClient({ region })
 }
 
 export async function getSecret(client: SecretsManagerClient, secretId: string): Promise<string | undefined> {
@@ -15,20 +51,22 @@ export async function getSecret(client: SecretsManagerClient, secretId: string):
   return res.SecretString
 }
 
-export async function createSecret(client: SecretsManagerClient, name: string, secretString: string): Promise<string | undefined> {
-  const parts = name.split('/')
-  const ownerCandidate = parts[4] || 'unknown'
-  const isWork = ownerCandidate === 'team' || name.includes('/team/')
-  const ownerUid = isWork ? 'team' : ownerCandidate
-  const res = await client.send(new CreateSecretCommand({ 
+export async function createSecret(client: SecretsManagerClient, name: string, secretString: string, department?: string): Promise<string | undefined> {
+  // const parts = name.split('/')
+  // const ownerCandidate = parts[4] || 'unknown'
+  // const isWork = ownerCandidate === 'team' || name.includes('/team/')
+  // const ownerUid = isWork ? 'team' : ownerCandidate
+  const payload = { 
     Name: name, 
     SecretString: secretString,
     Tags: [
       { Key: 'App', Value: 'cloudpass' },
-      { Key: 'Scope', Value: isWork ? 'work' : 'personal' },
-      { Key: 'OwnerUid', Value: ownerUid },
+      ...(department ? [{ Key: 'Department', Value: String(department) }] : []),
+      // { Key: 'Scope', Value: isWork ? 'work' : 'personal' },
+      // { Key: 'OwnerUid', Value: ownerUid },
     ],
-  }))
+  } 
+  const res = await client.send(new CreateSecretCommand(payload))
   return res.ARN
 }
 
@@ -72,9 +110,9 @@ export async function listAppSecrets(client: SecretsManagerClient): Promise<Team
   return items
 }
 
-export async function upsertSecretByName(client: SecretsManagerClient, name: string, secretString: string): Promise<string | undefined> {
+export async function upsertSecretByName(client: SecretsManagerClient, name: string, secretString: string, department?: string): Promise<string | undefined> {
   try {
-    return await createSecret(client, name, secretString)
+    return await createSecret(client, name, secretString, department)
   } catch (e: any) {
     try {
       await putSecret(client, name, secretString)

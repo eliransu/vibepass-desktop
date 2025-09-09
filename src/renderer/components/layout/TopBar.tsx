@@ -1,28 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
-import { setAwsRegion as setAwsRegionAction, setAwsProfile as setAwsProfileAction, setAwsAccountId } from '../../features/ui/uiSlice'
+import { setAwsRegion as setAwsRegionAction, setAwsAccountId } from '../../features/ui/uiSlice'
 import { IconButton } from '../ui/icon-button'
 import { Icon } from '../ui/icon'
 import { ConfirmDialog } from '../ui/confirm-dialog'
+import AceEditor from 'react-ace'
+import 'ace-builds/src-noconflict/mode-json'
+import 'ace-builds/src-noconflict/theme-github'
+import 'ace-builds/src-noconflict/theme-monokai'
+import 'ace-builds/src-noconflict/ext-language_tools'
   
 export function TopBar(): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [theme, setTheme] = useState<string>(() => localStorage.getItem('theme') || 'dark')
   const user = useSelector((s: RootState) => s.auth.user)
-  const awsAccountIdState = useSelector((s: RootState) => s.ui.awsAccountId)
+  // Keep account id in store; UI does not directly use it here
+  useSelector((s: RootState) => s.ui.awsAccountId)
   const dispatch = useDispatch()
-  const [awsProfiles, setAwsProfiles] = useState<Record<string, string>>({})
-  const [awsProfile, setAwsProfile] = useState<string>(() => localStorage.getItem('awsProfile') || 'default')
-  const [awsRegion, setAwsRegion] = useState<string>('us-east-1')
   const [showProfileError, setShowProfileError] = useState(false)
-  // AWS region order: us-east-1, us-east-2, us-west-1, us-west-2, eu-west-1, eu-west-2, eu-west-3, eu-central-1, eu-north-1, ap-south-1, ap-northeast-1, ap-northeast-2, ap-southeast-1, ap-southeast-2, etc.
-  const regions = useMemo(() => [
-    'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
-    'eu-west-1', 'eu-west-2', 'eu-central-1', 'eu-north-1',
-    'ap-south-1', 'ap-northeast-1', 'ap-southeast-1', 'ap-southeast-2'
-  ], [])
+  const [config, setConfig] = useState<any | null>(null)
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
+  const [configText, setConfigText] = useState('')
+  const [configError, setConfigError] = useState<string | null>(null)
   
   useEffect(() => {
     localStorage.setItem('theme', theme)
@@ -30,100 +31,227 @@ export function TopBar(): React.JSX.Element {
   }, [theme])
   
   const currentLang = (i18n.language ?? (i18n as any).resolvedLanguage ?? 'en') as string
-  const isRtl = currentLang.startsWith('he')
-  const arrowSideClass = isRtl ? 'left-1.5' : 'right-1.5'
-  const padSideClass = isRtl ? 'pl-7' : 'pr-7'
   useEffect(() => {
     // Set direction by language
     const dir = currentLang.startsWith('he') ? 'rtl' : 'ltr'
     document.documentElement.setAttribute('dir', dir)
   }, [currentLang])
 
-  const persistAws = useCallback(async (profile: string, region: string) => {
-    localStorage.setItem('awsProfile', profile)
-    // Do not persist awsRegion; it is resolved from ~/.aws/config each time
-    void window.cloudpass.storeSet('awsProfile', profile)
-    dispatch(setAwsProfileAction(profile))
-    dispatch(setAwsRegionAction(region))
-    // Clear account context immediately to avoid showing data from previous profile
-    localStorage.removeItem('awsAccountId')
-    void window.cloudpass.storeSet('awsAccountId', '')
-    dispatch(setAwsAccountId(''))
-    try {
-      const account = await window.cloudpass.awsGetAccount(profile)
-      if (account) {
-        localStorage.setItem('awsAccountId', account)
-        void window.cloudpass.storeSet('awsAccountId', account)
-        dispatch(setAwsAccountId(account))
-      }
-      // If missing/expired, avoid popups; inline screens will prompt user
-    } catch {}
+  const persistFromConfig = useCallback(async (cfg: any | null) => {
+    if (!cfg) return
+    const region = cfg?.region || cfg?.ssoRegion
+    const accountId = cfg?.accountId || cfg?.ssoAccountId
+    const team = (cfg?.team || '') as string
+    const department = (cfg?.department || '') as string
+    if (region) {
+      dispatch(setAwsRegionAction(region))
+    }
+    if (accountId) {
+      localStorage.setItem('awsAccountId', accountId)
+      try { await window.cloudpass.storeSet('awsAccountId', accountId) } catch {}
+      dispatch(setAwsAccountId(accountId))
+    }
+    if (team) {
+      try {
+        localStorage.setItem('team', team)
+        await window.cloudpass.storeSet('team', team)
+      } catch {}
+    }
+    if (department) {
+      try {
+        localStorage.setItem('department', department)
+        await window.cloudpass.storeSet('department', department)
+      } catch {}
+    }
   }, [dispatch])
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        const profs = await window.cloudpass.awsGetProfiles()
+        const cfg = await window.cloudpass.configGet()
         if (!mounted) return
-        
-        // Check if the response indicates no CloudPass account
-        if (typeof profs === "string" && profs === "no_cloudpass_account") {
-          setShowProfileError(true)
-          return
+        setConfig(cfg)
+        if (cfg) {
+          await persistFromConfig(cfg)
         }
-        
-        setAwsProfiles(profs)
-        const keys = Object.keys(profs || {})
-        // Pick current profile if valid; otherwise prefer first non-default when available
-        let nextProfile = awsProfile && keys.includes(awsProfile) ? awsProfile : undefined
-        if (!nextProfile) {
-          const nonDefault = keys.find((k) => k !== 'default')
-          nextProfile = nonDefault || (keys[0] || 'default')
-        }
-        // If still 'default' but there is a non-default, prefer non-default
-        if (nextProfile === 'default') {
-          const nonDefault = keys.find((k) => k !== 'default')
-          if (nonDefault) nextProfile = nonDefault
-        }
-        setAwsProfile(nextProfile)
-        // Always resolve region from config for the chosen profile
-        let defaultRegion = 'us-east-1'
-        try {
-          const cfgRegion = await window.cloudpass.awsGetDefaultRegion(nextProfile)
-          if (cfgRegion && typeof cfgRegion === 'string') defaultRegion = cfgRegion
-        } catch {}
-        if (!mounted) return
-        setAwsRegion(defaultRegion)
-        void persistAws(nextProfile, defaultRegion)
       } catch {
         // ignore
       }
     })()
     return () => { mounted = false }
-  }, [awsProfile, persistAws])
+  }, [persistFromConfig])
   
-  // Auto-apply selection and attempt SSO right after user login
   useEffect(() => {
-    if (!user?.uid) return
-    void persistAws(awsProfile, awsRegion)
-    // ;(async () => {
-    //   try {
-    //     const res = await window.cloudpass.awsSsoLogin(awsProfile)
-    //     if (!res?.ok) {
-    //       alert(t('team.ssoLoginCta') as string)
-    //     } else {
-    //       const account = await window.cloudpass.awsGetAccount(awsProfile)
-    //       if (!account) alert(t('team.ssoLoginCta') as string)
-    //     }
-    //   } catch {
-    //     alert(t('team.ssoLoginCta') as string)
-    //   }
-    // })()
-  }, [user?.uid, awsProfile, awsRegion, persistAws])
+    if (!user?.uid || !config) return
+    void (async () => { await persistFromConfig(config) })()
+  }, [user?.uid, config, persistFromConfig])
+
+  // Simple JSON validation function to replace Zod
+  function validateConfig(parsed: any): { isValid: boolean; error?: string } {
+    if (!parsed || typeof parsed !== 'object') {
+      return { isValid: false, error: 'Configuration must be an object' }
+    }
+
+    const type = parsed.type
+    if (type !== 'sso' && type !== 'keys') {
+      return { isValid: false, error: 'Type must be either "sso" or "keys"' }
+    }
+
+    // Department is mandatory for all configurations
+    if (!parsed.department || typeof parsed.department !== 'string') {
+      return { isValid: false, error: 'department is required' }
+    }
+
+    if (type === 'sso') {
+      if (!parsed.ssoStartUrl || typeof parsed.ssoStartUrl !== 'string') {
+        return { isValid: false, error: 'ssoStartUrl is required for SSO type' }
+      }
+      if (!parsed.ssoRegion || typeof parsed.ssoRegion !== 'string') {
+        return { isValid: false, error: 'ssoRegion is required for SSO type' }
+      }
+      if (!parsed.ssoAccountId || typeof parsed.ssoAccountId !== 'string') {
+        return { isValid: false, error: 'ssoAccountId is required for SSO type' }
+      }
+      if (!parsed.ssoRoleName || typeof parsed.ssoRoleName !== 'string') {
+        return { isValid: false, error: 'ssoRoleName is required for SSO type' }
+      }
+      try {
+        new URL(parsed.ssoStartUrl)
+      } catch {
+        return { isValid: false, error: 'ssoStartUrl must be a valid URL' }
+      }
+    }
+
+    if (type === 'keys') {
+      if (!parsed.accessKeyId || typeof parsed.accessKeyId !== 'string') {
+        return { isValid: false, error: 'accessKeyId is required for keys type' }
+      }
+      if (!parsed.secretAccessKey || typeof parsed.secretAccessKey !== 'string') {
+        return { isValid: false, error: 'secretAccessKey is required for keys type' }
+      }
+    }
+
+    return { isValid: true }
+  }
+
+  function normalizeRawConfig(raw: any): any {
+    const get = (obj: any, candidates: string[]): any => {
+      for (const key of candidates) {
+        if (obj && Object.prototype.hasOwnProperty.call(obj, key)) return obj[key]
+        const alt = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`)
+        if (obj && Object.prototype.hasOwnProperty.call(obj, alt)) return obj[alt]
+      }
+      return undefined
+    }
+    const explicitType = (raw?.type || raw?.provider || '').toString().toLowerCase()
+    const inferred: 'sso' | 'keys' | undefined = explicitType.includes('sso')
+      ? 'sso'
+      : explicitType.includes('key')
+        ? 'keys'
+        : get(raw, ['accessKeyId', 'aws_access_key_id'])
+          ? 'keys'
+          : get(raw, ['ssoStartUrl', 'startUrl', 'sso_start_url'])
+            ? 'sso'
+            : undefined
+    const type: 'sso' | 'keys' = inferred || 'sso'
+    const region = get(raw, ['region', 'ssoRegion', 'sso_region'])
+    const accountId = get(raw, ['accountId', 'ssoAccountId', 'sso_account_id'])
+    const team = get(raw, ['team'])
+    const department = get(raw, ['department'])
+    if (type === 'keys') {
+      return {
+        type: 'keys',
+        region,
+        accountId,
+        team,
+        department,
+        accessKeyId: get(raw, ['accessKeyId', 'aws_access_key_id']),
+        secretAccessKey: get(raw, ['secretAccessKey', 'aws_secret_access_key']),
+        sessionToken: get(raw, ['sessionToken', 'aws_session_token']),
+      }
+    }
+    return {
+      type: 'sso',
+      region,
+      accountId,
+      team,
+      department,
+      ssoStartUrl: get(raw, ['ssoStartUrl', 'startUrl', 'sso_start_url']),
+      ssoRegion: get(raw, ['ssoRegion', 'region', 'sso_region']),
+      ssoAccountId: get(raw, ['ssoAccountId', 'accountId', 'sso_account_id']),
+      ssoRoleName: get(raw, ['ssoRoleName', 'roleName', 'sso_role_name']),
+    }
+  }
+
+  async function openConfigModal(prefill?: any | null): Promise<void> {
+    try {
+      setConfigError(null)
+      const latest = await window.cloudpass.configGet()
+      const toFill = (latest ?? prefill) ?? {
+        type: 'sso',
+        ssoStartUrl: 'https://example.awsapps.com/start',
+        ssoRegion: 'us-east-1',
+        ssoAccountId: '123456789012',
+        ssoRoleName: 'AdministratorAccess',
+        region: 'us-east-1',
+        department: 'engineering',
+        team: 'backend'
+      }
+      setConfigText(JSON.stringify(toFill, null, 2))
+    } catch {
+      const fallback = {
+        type: 'sso',
+        ssoStartUrl: 'https://example.awsapps.com/start',
+        ssoRegion: 'us-east-1',
+        ssoAccountId: '123456789012',
+        ssoRoleName: 'AdministratorAccess',
+        region: 'us-east-1',
+        department: 'engineering',
+        team: 'backend'
+      }
+      setConfigText(JSON.stringify(fallback, null, 2))
+    }
+    setIsConfigModalOpen(true)
+  }
+
+  async function saveConfig(): Promise<void> {
+    try {
+      setConfigError(null)
+      const parsed = JSON.parse(configText)
+      const normalized = normalizeRawConfig(parsed)
+      
+      // Use simple validation instead of Zod
+      const validation = validateConfig(normalized)
+      if (!validation.isValid) {
+        setConfigError(validation.error || 'Invalid configuration')
+        return
+      }
+
+      await window.cloudpass.configSet(normalized)
+      setConfig(normalized)
+      await persistFromConfig(normalized)
+      // Ensure other areas immediately see new config
+      try { await window.cloudpass.storeSet('awsConfigReloadAt', Date.now()) } catch {}
+      setIsConfigModalOpen(false)
+      
+      // Reload the app after successful save
+      setTimeout(() => {
+        window.location.reload()
+      }, 100)
+    } catch (e: any) {
+      try {
+        const msg = e?.message || 'Invalid JSON'
+        setConfigError(msg)
+      } catch {
+        setConfigError('Invalid JSON')
+      }
+    }
+  }
+
   
   return (
-    <header className="bg-background border-b border-border px-6 flex items-center justify-between shadow-xs" style={{height: '72px'}}>
+    <header className="bg-card border-b-2 border-border px-6 flex items-center justify-between shadow-md" style={{height: '72px'}}>
       <div className="flex-1" />
 
       {/* Right side controls */}
@@ -143,91 +271,40 @@ export function TopBar(): React.JSX.Element {
           </div>
         )}
 
-        {/* AWS Profile selector (first) */}
-        <div className="relative inline-flex items-center" style={{height: '44px'}}>
-          <label className="mr-3 text-xs font-medium text-muted-foreground hidden sm:block">{t('team.selectAwsProfile') as string}</label>
-          <select
-            className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border border-border rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring transition-colors shadow-xs hover:shadow-sm ${padSideClass}`}
-            style={{ WebkitAppearance: 'none', appearance: 'none' as any, MozAppearance: 'none', background: 'none', backgroundImage: 'none' }}
-            value={awsProfile}
-            onChange={async (e) => {
-              const p = e.target.value
-              setAwsProfile(p)
-              // Always resolve region from config for selected profile
-              let cfgRegion = 'us-east-1'
-              try {
-                const r = await window.cloudpass.awsGetDefaultRegion(p)
-                if (r) cfgRegion = r
-              } catch {}
-              setAwsRegion(cfgRegion)
-              void persistAws(p, cfgRegion)
-            }}
-            title={t('team.awsProfile') as string}
+        {/* Config loader / dropdown */}
+        {config ? (
+          <div className="relative inline-flex items-center" style={{height: '44px'}}>
+            <button
+              className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border-2 border-border rounded-lg text-sm font-medium focus:outline-none transition-colors shadow-sm hover:shadow-md`}
+              onClick={() => void openConfigModal(config)}
+              title={t('config.reload') as string}
+            >
+              {t('config.editProfile')}
+            </button>
+          </div>
+        ) : (
+          <button
+            className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
+            onClick={() => void openConfigModal(null)}
+            title={t('config.load') as string}
           >
-            {Object.keys(awsProfiles).map((k) => (
-              <option key={k} value={k}>{k}</option>
-            ))}
-          </select>
-          <Icon 
-            name="chevron-down" 
-            size={16} 
-            className={`absolute ${arrowSideClass} top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none`} 
-          />
-        </div>
+            {t('config.loadCloudpassConfig')}
+          </button>
+        )}
 
-        {/* AWS Region selector (second) */}
-        <div className="relative inline-flex items-center" style={{height: '44px'}}>
-          <select
-            className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border border-border rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring transition-colors shadow-xs hover:shadow-sm ${padSideClass}`}
-            style={{ WebkitAppearance: 'none', appearance: 'none' as any, MozAppearance: 'none', background: 'none', backgroundImage: 'none' }}
-            value={awsRegion}
-            onChange={async (_e) => {
-              // Disable manual selection; always use ~/.aws/config
-              let cfgRegion = awsRegion
-              try {
-                const r = await window.cloudpass.awsGetDefaultRegion(awsProfile)
-                if (r) cfgRegion = r
-              } catch {}
-              setAwsRegion(cfgRegion)
-              void persistAws(awsProfile, cfgRegion)
-            }}
-            title={t('team.awsRegion') as string}
-          >
-            {regions.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          <Icon 
-            name="chevron-down" 
-            size={16} 
-            className={`absolute ${arrowSideClass} top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none`} 
-          />
-        </div>
-
-        {/* AWS SSO Login */}
+        {/* SSO Login */}
         <button
-          className={`h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border shadow-xs hover:shadow-sm active:scale-[0.98] ${!awsAccountIdState ? 'bg-destructive-light text-destructive hover:bg-destructive/20 border-destructive/30' : 'bg-secondary hover:bg-secondary-hover border-border'}`}
+          className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
           onClick={async () => {
             try {
-              await window.cloudpass.awsSsoLogin(awsProfile)
-              // Attempt fetching account after SSO to verify session
-              const account = await window.cloudpass.awsGetAccount(awsProfile)
-              if (account) {
-                localStorage.setItem('awsAccountId', account)
-                void window.cloudpass.storeSet('awsAccountId', account)
-                dispatch(setAwsAccountId(account))
-              } else {
-                // Clear any stale account id so UI reflects missing/expired SSO
-                localStorage.removeItem('awsAccountId')
-                void window.cloudpass.storeSet('awsAccountId', '')
-                dispatch(setAwsAccountId(''))
+              const res = await window.cloudpass.awsSsoLogin()
+              if (!res?.ok) {
+                // Fallback: open SSO start URL if present
+                const latest = await window.cloudpass.configGet()
+                const url = latest?.ssoStartUrl || latest?.startUrl
+                if (url) { await window.cloudpass.openExternal(url) }
               }
-            } catch {
-              // On failure, ensure stale account id is cleared
-              localStorage.removeItem('awsAccountId')
-              void window.cloudpass.storeSet('awsAccountId', '')
-              dispatch(setAwsAccountId(''))
-            }
+            } catch {}
           }}
           title={t('team.ssoLogin') as string}
         >
@@ -241,7 +318,7 @@ export function TopBar(): React.JSX.Element {
           label={theme === 'dark' ? t('theme.light') : t('theme.dark')}
           variant="ghost"
           size="icon-sm"
-          className="bg-secondary hover:bg-secondary-hover border border-border shadow-xs hover:shadow-sm"
+          className="bg-secondary hover:bg-secondary-hover border-2 border-border shadow-sm hover:shadow-md"
           iconSize={16}
         />
 
@@ -267,7 +344,7 @@ export function TopBar(): React.JSX.Element {
         )}
       </div>
 
-      {/* AWS Profile Error Modal */}
+      {/* AWS Profile Error Modal (kept for compatibility; hidden if unused) */}
       <ConfirmDialog
         isOpen={showProfileError}
         onClose={() => setShowProfileError(false)}
@@ -277,6 +354,55 @@ export function TopBar(): React.JSX.Element {
         confirmText={t('actions.close')}
         variant="destructive"
       />
+
+      {/* Config Modal */}
+      {isConfigModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setIsConfigModalOpen(false) }}>
+          <div className="bg-card border-2 border-border rounded-2xl shadow-xl max-w-2xl w-full p-6">
+            <h3 className="text-lg font-semibold text-foreground mb-4 tracking-tight">{t('config.title')}</h3>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  className="h-9 px-3 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md bg-secondary hover:bg-secondary-hover border-border"
+                  onClick={async () => { const f = await window.cloudpass.fileOpenJson(); if (f?.content) setConfigText(f.content) }}
+                >{t('config.loadFile')}</button>
+                <div className="text-xs text-muted-foreground self-center">{t('config.pasteJsonHint')}</div>
+              </div>
+              <div className="border-2 border-border rounded-lg overflow-hidden">
+                <AceEditor
+                  mode="json"
+                  theme={theme === 'dark' ? 'monokai' : 'github'}
+                  onChange={(value) => setConfigText(value)}
+                  value={configText}
+                  name="config-editor"
+                  width="100%"
+                  height="256px"
+                  fontSize={12}
+                  showPrintMargin={false}
+                  showGutter={true}
+                  highlightActiveLine={true}
+                  setOptions={{
+                    enableBasicAutocompletion: true,
+                    enableLiveAutocompletion: true,
+                    enableSnippets: false,
+                    showLineNumbers: true,
+                    tabSize: 2,
+                    useWorker: false
+                  }}
+                  style={{
+                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+                  }}
+                />
+              </div>
+              {configError && <div className="text-destructive text-sm">{configError}</div>}
+              <div className="flex justify-end gap-3 pt-2">
+                <button className="h-9 px-3 rounded-lg text-sm font-medium border-2 bg-secondary hover:bg-secondary-hover border-border shadow-sm hover:shadow-md" onClick={() => setIsConfigModalOpen(false)}>{t('actions.cancel')}</button>
+                <button className="h-9 px-3 rounded-lg text-sm font-medium border-2 bg-primary text-primary-foreground hover:opacity-90 border-primary-border shadow-sm hover:shadow-md" onClick={() => void saveConfig()}>{t('actions.save')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   )
 }

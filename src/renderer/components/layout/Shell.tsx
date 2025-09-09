@@ -5,11 +5,8 @@ import { TopBar } from './TopBar'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
 import { setSelectedVaultId, toggleSidebar, setSelectedItemId, setSearchQuery } from '../../features/ui/uiSlice'
-import { getVaultsIndexSecretNameWithOverrides } from '../../services/vaultPaths'
-import { Input } from '../ui/input'
-import { Button } from '../ui/button'
 import { IconButton } from '../ui/icon-button'
-import { Icon, PasswordIcon, ApiKeyIcon, NotesIcon, CardsIcon, LoadingIcon } from '../ui/icon'
+import { Icon, PasswordIcon, ApiKeyIcon, NotesIcon, CardsIcon } from '../ui/icon'
 
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { t } = useTranslation()
@@ -162,86 +159,30 @@ function VaultsList(): React.JSX.Element {
   const selected = useSelector((s: RootState) => s.ui.selectedVaultId)
   const user = useSelector((s: RootState) => s.auth.user)
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
-  const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
-  const [customVaults, setCustomVaults] = useState<Array<{ id: string; name: string }>>([])
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [vaultName, setVaultName] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isLoadingVaults, setIsLoadingVaults] = useState(true)
+  const [departmentLabel, setDepartmentLabel] = useState<string>('')
 
   const baseItems = useMemo(() => ([
     { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
-    { id: 'work', name: t('vault.work') as string, icon: 'briefcase', color: 'bg-purple-500' },
-  ]), [t])
+    { id: 'work', name: (departmentLabel && departmentLabel.trim().length > 0) ? departmentLabel : (t('vault.work') as string), icon: 'briefcase', color: 'bg-purple-500' },
+  ]), [t, departmentLabel])
 
   useEffect(() => {
-    let mounted = true
     ;(async () => {
-      setIsLoadingVaults(true)
-      if (!user?.uid) { setIsLoadingVaults(false); return }
+      if (!user?.uid) { return }
       try {
-        const profile = awsProfile
-        const accountId = awsAccountId
-        const region = awsRegion || (await (window as any).cloudpass?.awsGetDefaultRegion(profile)) || 'us-east-1'
-        const name = getVaultsIndexSecretNameWithOverrides({ uid: user.uid, accountIdOverride: accountId, regionOverride: region, email: user?.email })
-        const secret = await (window as any).cloudpass?.vaultRead(region, name, profile)
-        if (!mounted) return
-        if (secret) {
-          const parsed = JSON.parse(secret || '[]') as Array<{ id: string; name: string }>
-          setCustomVaults(Array.isArray(parsed) ? parsed : [])
-        } else {
-          setCustomVaults([])
-        }
+        const cfg = await (window as any).cloudpass?.configGet?.()
+        setDepartmentLabel((cfg?.department || '') as string)
       } catch {
         // ignore
-      } finally {
-        setIsLoadingVaults(false)
       }
     })()
-    return () => { mounted = false }
-  }, [user?.uid, user?.email, awsRegion, awsProfile, awsAccountId])
+  }, [user?.uid, user?.email, awsRegion, awsAccountId])
 
-  async function createVaultByName(name: string): Promise<void> {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    const slug = trimmed.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').slice(0, 40)
-    if (!slug) return
-    setIsSaving(true)
-    try {
-      if (!user?.uid) return
-      const profile = awsProfile
-      const accountId = awsAccountId
-      const region = awsRegion || (await (window as any).cloudpass?.awsGetDefaultRegion(profile)) || 'us-east-1'
-      const indexName = getVaultsIndexSecretNameWithOverrides({ uid: user.uid, accountIdOverride: accountId, regionOverride: region, email: user?.email })
-      const current = await (window as any).cloudpass?.vaultRead(region, indexName, profile)
-      const parsed = current ? (JSON.parse(current) as Array<{ id: string; name: string }>) : []
-      const next = [...parsed.filter(v => v.id !== slug), { id: slug, name: trimmed }]
-      await (window as any).cloudpass?.vaultWrite(region, indexName, JSON.stringify(next), profile)
-      setCustomVaults(next)
-      dispatch(setSelectedVaultId(slug))
-      setIsAddOpen(false)
-      setVaultName('')
-    } catch {
-      // ignore
-    } finally {
-      setIsSaving(false)
-    }
-  }
 
   return (
     <div className="space-y-1">
-      {isLoadingVaults ? (
-        <>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg animate-shimmer">
-              <div className="w-6 h-6 rounded-lg bg-muted-foreground/20 flex-shrink-0" />
-              <div className="h-3 w-24 bg-muted-foreground/20 rounded" />
-            </div>
-          ))}
-        </>
-      ) : (
-      [...baseItems, ...customVaults].map((vault: any) => (
+      {baseItems.map((vault: any) => (
         <button 
           key={vault.id} 
           onClick={() => {
@@ -277,60 +218,7 @@ function VaultsList(): React.JSX.Element {
             <div className="w-2 h-2 bg-primary rounded-full animate-pulse-glow"></div>
           )}
         </button>
-      ))
-      )}
-      
-      <button 
-        onClick={() => setIsAddOpen(true)} 
-        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover interactive mt-2"
-      >
-        <div className="w-6 h-6 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 hover:border-primary/50 transition-colors">
-          <Icon name="plus" size={12} />
-        </div>
-        <span className="truncate">{t('vault.addVault')}</span>
-      </button>
-
-      {isAddOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) { setIsAddOpen(false); setVaultName('') } }}>
-          <div className="bg-background border border-border rounded-2xl shadow-xl max-w-md w-full p-6 animate-scale-in">
-            <h3 className="text-lg font-semibold text-foreground mb-4 tracking-tight">{t('vault.addVault')}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">{t('vault.enterVaultName')}</label>
-                <Input
-                  value={vaultName}
-                  onChange={(e) => setVaultName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void createVaultByName(vaultName) } }}
-                  autoFocus
-                  className="focus-enhanced"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button 
-                  variant="secondary" 
-                  onClick={() => { setIsAddOpen(false); setVaultName('') }} 
-                  disabled={isSaving}
-                  size="sm"
-                >
-                  {t('actions.cancel')}
-                </Button>
-                <Button 
-                  onClick={() => void createVaultByName(vaultName)} 
-                  disabled={isSaving || !vaultName.trim()}
-                  size="sm"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <LoadingIcon size={14} />
-                      {t('actions.create')}
-                    </span>
-                  ) : t('actions.create')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      ))}
     </div>
   )
 }

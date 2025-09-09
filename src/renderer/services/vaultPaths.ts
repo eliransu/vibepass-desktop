@@ -23,12 +23,13 @@ export function resolveVaultContext(params: { uid: string; selectedVaultId: stri
   }
 
   if (selectedVaultId === 'work') {
-    // Shared/team at tenant level: {tenant}/shared/team
-    return { collectionPath: `${tenant}/${accountId}/${savedRegion}/shared/team`, region: savedRegion as string, profile: savedProfile || undefined }
+    // Shared/department at tenant level: {tenant}/shared/department
+    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'
+    return { collectionPath: `${tenant}/${accountId}/${savedRegion}/shared/${department}`, region: savedRegion as string, profile: savedProfile || undefined }
   }
 
-  // Custom vaults: {tenant}/{user_id}/{custom}
-  return { collectionPath: `${tenant}/${accountId}/${savedRegion}/${uid}/${selectedVaultId}`, region: savedRegion as string, profile: savedProfile || undefined }
+  // Invalid vault ID - only 'personal' and 'work' are supported
+  throw new Error(`Invalid vault ID: ${selectedVaultId}. Only 'personal' and 'work' vaults are supported.`)
 }
 
 export function getVaultSecretName(params: { uid: string; selectedVaultId: string; email?: string | null }): string {
@@ -37,9 +38,13 @@ export function getVaultSecretName(params: { uid: string; selectedVaultId: strin
   const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown'
   const region = ''
   if (selectedVaultId === 'work') {
-    return `cloudpass/${tenant}/${accountId}/${region}/team/vault`
+    return `cloudpass/${tenant}/${accountId}/${region}/department/vault`
   }
-  return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  if (selectedVaultId === 'personal') {
+    return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  }
+  // Invalid vault ID - only 'personal' and 'work' are supported
+  throw new Error(`Invalid vault ID: ${selectedVaultId}. Only 'personal' and 'work' vaults are supported.`)
 }
 
 export function getVaultSecretNameWithOverrides(params: { uid: string; selectedVaultId: string; email?: string | null; regionOverride?: string; accountIdOverride?: string }): string {
@@ -48,23 +53,15 @@ export function getVaultSecretNameWithOverrides(params: { uid: string; selectedV
   const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
   const region = regionOverride || ''
   if (selectedVaultId === 'work') {
-    return `cloudpass/${tenant}/${accountId}/${region}/team/vault`
+    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'
+    return `cloudpass/${tenant}/${accountId}/${region}/${department}/vault`
   }
-  return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  if (selectedVaultId === 'personal') {
+    return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
+  }
+  // Invalid vault ID - only 'personal' and 'work' are supported
+  throw new Error(`Invalid vault ID: ${selectedVaultId}. Only 'personal' and 'work' vaults are supported.`)
 }
 
-// Index secret listing user-defined custom vaults for quick navigation
-export function getVaultsIndexSecretNameWithOverrides(params: { uid: string; email?: string | null; regionOverride?: string; accountIdOverride?: string }): string {
-  const { uid,
-    //  email,
-      regionOverride,
-      // accountIdOverride
-     } = params
-  // const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
-  // const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
-  const region = regionOverride || ''
-  // return `cloudpass/${tenant}/${accountId}/${region}/${uid}/_vaults`
-  return `cloudpass/${region}/${uid}/_vaults`
-}
 
 

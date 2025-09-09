@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, desktopCapturer, screen } from 'electron'
 
 export type PreloadApi = {
   copyToClipboard: (text: string) => void
-  getOsUsername: () => Promise<string>
+  getAwsUserIdentity: () => Promise<string>
   keytarSet: (service: string, account: string, secret: string) => Promise<boolean>
   keytarGet: (service: string, account: string) => Promise<string | null>
   biometricCheck: () => Promise<boolean>
@@ -10,10 +10,12 @@ export type PreloadApi = {
   biometricRetrieve: () => Promise<string | null>
   storeGet: <T = unknown>(key: string) => Promise<T | undefined>
   storeSet: (key: string, value: unknown) => Promise<boolean>
-  awsGetProfiles: () => Promise<Record<string, string>>
-  awsSsoLogin: (profile: string) => Promise<{ ok: boolean; error?: string }>
-  awsGetAccount: (profile?: string) => Promise<string | null>
-  awsGetDefaultRegion: (profile?: string) => Promise<string | null>
+  // Explicit config management
+  configGet: () => Promise<any | null>
+  configSet: (cfg: any | null) => Promise<boolean>
+  fileOpenJson: () => Promise<{ name: string; content: string } | null>
+  openExternal: (url: string) => Promise<boolean>
+  awsSsoLogin: () => Promise<{ ok: boolean; error?: string }>
   teamList: (region: string, ids: string[]) => Promise<Record<string, string | null>>
   teamListWithProfile: (region: string, ids: string[], profile?: string) => Promise<Record<string, string | null>>
   teamCreate: (region: string, name: string, secretString: string, profile?: string) => Promise<string | undefined>
@@ -22,7 +24,7 @@ export type PreloadApi = {
   teamListApp: (region: string, profile?: string) => Promise<Array<{ arn?: string; name?: string; description?: string; lastChangedDate?: string }>>
   teamGetSecretValue: (region: string, secretId: string, profile?: string) => Promise<string | null>
   // Consolidated vault secret helpers
-  vaultRead: (region: string, name: string, profile?: string) => Promise<string | null>
+  vaultRead: (region: string, name: string, profile?: string) => Promise<{ success: true; data: string | null } | { success: false; error: string; message: string }>
   vaultWrite: (region: string, name: string, secretString: string, profile?: string) => Promise<boolean>
   // QR / screen capture helpers
   captureScreen: () => Promise<string | null>
@@ -43,8 +45,8 @@ const api: PreloadApi = {
   copyToClipboard(text: string): void {
     void ipcRenderer.invoke('clipboard:write', text)
   },
-  async getOsUsername(): Promise<string> {
-    return ipcRenderer.invoke('os:get-username')
+  async getAwsUserIdentity(): Promise<string> {
+    return ipcRenderer.invoke('aws:get-user-identity')
   },
   async keytarSet(service: string, account: string, secret: string): Promise<boolean> {
     return ipcRenderer.invoke('secure:keytar-set', service, account, secret)
@@ -67,17 +69,20 @@ const api: PreloadApi = {
   async storeSet(key: string, value: unknown): Promise<boolean> {
     return ipcRenderer.invoke('store:set', key, value)
   },
-  async awsGetProfiles(): Promise<Record<string, string>> {
-    return ipcRenderer.invoke('aws:get-profiles')
+  async configGet(): Promise<any | null> {
+    return ipcRenderer.invoke('config:get')
   },
-  async awsSsoLogin(profile: string): Promise<{ ok: boolean; error?: string }> {
-    return ipcRenderer.invoke('aws:sso-login', profile)
+  async configSet(cfg: any | null): Promise<boolean> {
+    return ipcRenderer.invoke('config:set', cfg)
   },
-  async awsGetAccount(profile?: string): Promise<string | null> {
-    return ipcRenderer.invoke('aws:get-account', profile)
+  async fileOpenJson(): Promise<{ name: string; content: string } | null> {
+    return ipcRenderer.invoke('file:open-json')
   },
-  async awsGetDefaultRegion(profile?: string): Promise<string | null> {
-    return ipcRenderer.invoke('aws:get-default-region', profile)
+  async openExternal(url: string): Promise<boolean> {
+    return ipcRenderer.invoke('shell:open-external', url)
+  },
+  async awsSsoLogin(): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke('aws:sso-login')
   },
   async teamList(region: string, ids: string[]): Promise<Record<string, string | null>> {
     return ipcRenderer.invoke('team:list', region, ids)
@@ -100,7 +105,7 @@ const api: PreloadApi = {
   async teamGetSecretValue(region: string, secretId: string, profile?: string): Promise<string | null> {
     return ipcRenderer.invoke('team:get-secret-value', region, secretId, profile)
   },
-  async vaultRead(region: string, name: string, profile?: string): Promise<string | null> {
+  async vaultRead(region: string, name: string, profile?: string): Promise<{ success: true; data: string | null } | { success: false; error: string; message: string }> {
     return ipcRenderer.invoke('vault:read', region, name, profile)
   },
   async vaultWrite(region: string, name: string, secretString: string, profile?: string): Promise<boolean> {

@@ -1,76 +1,24 @@
 import { app, BrowserWindow, shell, Menu, ipcMain, systemPreferences, clipboard as mainClipboard, dialog, desktopCapturer, screen } from 'electron'
 import keytar from 'keytar'
 import Store from 'electron-store'
-import { createSecretsClient, getSecret, createSecret, putSecret, deleteSecret, listAppSecrets, upsertSecretByName } from '../shared/aws/secretsManager'
+import { createSecretsClient, getSecret, createSecret, putSecret, deleteSecret, listAppSecrets, type CloudPassConfig } from '../shared/aws/secretsManager'
 import path from 'node:path'
 import http from 'node:http'
 import { URL } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
 import { autoUpdater } from 'electron-updater'
-import { spawn , execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } from '@aws-sdk/client-sso-oidc'
+import { SSOClient, GetRoleCredentialsCommand } from '@aws-sdk/client-sso'
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts'
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 const store = new Store<{ [key: string]: unknown }>({ name: 'cloudpass' })
 // Removed blur-based auto-lock; we only lock on hide now
 
-// Minimal INI parser to read ~/.aws/config without external typings
-function parseIni(input: string): Record<string, any> {
-  const result: Record<string, any> = {}
-  let current: string | null = null
-  for (const raw of input.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line || line.startsWith(';') || line.startsWith('#')) continue
-    if (line.startsWith('[') && line.endsWith(']')) {
-      current = line.slice(1, -1).trim()
-      if (!result[current]) result[current] = {}
-      continue
-    }
-    const idx = line.indexOf('=')
-    if (idx > -1) {
-      const key = line.slice(0, idx).trim()
-      const value = line.slice(idx + 1).trim()
-      const target = current ? result[current] : result
-      target[key] = value
-    }
-  }
-  return result
-}
-
-function ensureAwsEnv(): void {
-  const defaultPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-  if (!process.env.PATH) {
-    process.env.PATH = defaultPath
-  } else if (!process.env.PATH.includes('/opt/homebrew/bin') && !process.env.PATH.includes('/usr/local/bin')) {
-    process.env.PATH = `${defaultPath}:${process.env.PATH}`
-  }
-  if (!process.env.AWS_SDK_LOAD_CONFIG) {
-    process.env.AWS_SDK_LOAD_CONFIG = '1'
-  }
-}
-
-function resolveAwsCliPath(): string | null {
-  const candidates: string[] = []
-  if (process.env.AWS_CLI_PATH && process.env.AWS_CLI_PATH.trim().length > 0) {
-    candidates.push(process.env.AWS_CLI_PATH)
-  }
-  candidates.push('/opt/homebrew/bin/aws', '/usr/local/bin/aws', '/usr/bin/aws', '/bin/aws')
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) return candidate
-    } catch {
-      // ignore
-    }
-  }
-  try {
-    const which = execFileSync('/usr/bin/which', ['aws'], { encoding: 'utf8' }).trim()
-    if (which) return which
-  } catch {
-    // ignore
-  }
-  return null
-}
+// All AWS/SSO OS-based helpers removed. We strictly use explicit JSON config.
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
@@ -172,7 +120,6 @@ function createMainWindow(): void {
 }
 
 app.whenReady().then(() => {
-  ensureAwsEnv()
   createMainWindow()
   Menu.setApplicationMenu(null)
   if (!app.isPackaged) return
@@ -257,14 +204,29 @@ ipcMain.handle('store:set', async (_evt, key: string, value: unknown) => {
   return true
 })
 
+// Config storage
+ipcMain.handle('config:get', async () => {
+  const cfg = store.get('cloudpassConfig') as CloudPassConfig | undefined
+  return cfg ?? null
+})
+
+ipcMain.handle('config:set', async (_evt, cfg: CloudPassConfig | null) => {
+  if (cfg) {
+    store.set('cloudpassConfig', cfg as any)
+  } else {
+    store.delete('cloudpassConfig')
+  }
+  return true
+})
+
 // AWS Secrets Manager via IPC - renderer sends already encrypted strings
 ipcMain.handle('team:list', async (_evt, region: string, ids: string[], _profile?: string) => {
-  if (_profile && _profile !== 'default') {
-    process.env.AWS_PROFILE = _profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
   const results: Record<string, string | null> = {}
   for (const id of ids) {
     try {
@@ -277,226 +239,263 @@ ipcMain.handle('team:list', async (_evt, region: string, ids: string[], _profile
 })
 
 ipcMain.handle('team:create', async (_evt, region: string, name: string, secretString: string, _profile?: string) => {
-  if (_profile && _profile !== 'default') {
-    process.env.AWS_PROFILE = _profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
-  return createSecret(client, name, secretString)
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
+  const department = (cfg?.department || '') as string
+  return createSecret(client, name, secretString, department)
 })
 
-ipcMain.handle('team:update', async (_evt, region: string, id: string, secretString: string, profile?: string) => {
-  if (profile && profile !== 'default') {
-    process.env.AWS_PROFILE = profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+ipcMain.handle('team:update', async (_evt, region: string, id: string, secretString: string, _profile?: string) => {
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
   await putSecret(client, id, secretString)
   return true
 })
 
-ipcMain.handle('team:delete', async (_evt, region: string, id: string, force: boolean, profile?: string) => {
-  if (profile && profile !== 'default') {
-    process.env.AWS_PROFILE = profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+ipcMain.handle('team:delete', async (_evt, region: string, id: string, force: boolean, _profile?: string) => {
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
   await deleteSecret(client, id, force)
   return true
 })
 
 // List cloudpass-tagged secrets
 ipcMain.handle('team:list-app', async (_evt, region: string, _profile?: string) => {
-  if (_profile && _profile !== 'default') {
-    process.env.AWS_PROFILE = _profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
   return listAppSecrets(client)
 })
 
 // Get a secret value by ARN/id
-ipcMain.handle('team:get-secret-value', async (_evt, region: string, secretId: string, profile?: string) => {
-  if (profile && profile !== 'default') {
-    process.env.AWS_PROFILE = profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+ipcMain.handle('team:get-secret-value', async (_evt, region: string, secretId: string, _profile?: string) => {
+  console.log('🔍 team:get-secret-value called for:', secretId, 'in region:', region)
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
   return (await getSecret(client, secretId)) ?? null
 })
 
 // Consolidated vault secret read/write by name
-ipcMain.handle('vault:read', async (_evt, region: string, name: string, profile?: string) => {
-  if (profile && profile !== 'default') {
-    process.env.AWS_PROFILE = profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
+ipcMain.handle('vault:read', async (_evt, region: string, name: string, _profile?: string) => {
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
+  console.log('🔍 vault:read called for:', name, 'in region:', region)
   try {
-    return (await getSecret(client, name)) ?? null
+    const result = await getSecret(client, name)
+    console.log('✅ vault:read success:', name, result ? `(${result.length} chars)` : 'NULL')
+    return { success: true, data: result ?? null }
+  } catch (e: any) {
+    console.log('❌ vault:read error:', name, 'Error details:', JSON.stringify({
+      name: e.name,
+      __type: e.__type,
+      code: e.code,
+      message: e.message
+    }, null, 2))
+    
+    // Check multiple possible error type indicators
+    const isAccessDenied = e.__type === 'AccessDeniedException' || 
+                          e.name === 'AccessDeniedException' || 
+                          e.code === 'AccessDeniedException' ||
+                          (e.message && e.message.includes('AccessDenied'))
+    
+    if (isAccessDenied) {
+      return { success: false, error: 'AccessDeniedException', message: e.message || 'Access denied to vault secret' }
+    }
+    return { success: true, data: null }
+  }
+})
+
+ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretString: string, _profile?: string) => {
+  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const now = Date.now()
+  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const client = createSecretsClient(region, effectiveAuth)
+  const department = (cfg?.department || '') as string
+  // Prefer create; if already exists, fall back to update
+  try {
+    await createSecret(client, name, secretString, department)
+  } catch (e: any) {
+    const code = e?.name || e?.code || ''
+    const msg = e?.message || ''
+    const alreadyExists = code === 'ResourceExistsException' || /already ?exists|exists/i.test(msg)
+    if (!alreadyExists) throw e
+    await putSecret(client, name, secretString)
+  }
+  return true
+})
+// All AWS profile/region OS-based handlers removed
+
+// File open helper for JSON config
+ipcMain.handle('file:open-json', async () => {
+  try {
+    const res = await dialog.showOpenDialog({
+      title: 'Open CloudPass config',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (res.canceled || !res.filePaths || res.filePaths.length === 0) return null
+    const filePath = res.filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return { name: path.basename(filePath), content }
   } catch {
     return null
   }
 })
 
-ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretString: string, profile?: string) => {
-  if (profile && profile !== 'default') {
-    process.env.AWS_PROFILE = profile
-  } else {
-    delete process.env.AWS_PROFILE
-  }
-  const client = createSecretsClient(region)
-  await upsertSecretByName(client, name, secretString)
-  return true
+// Open external URL in default browser
+ipcMain.handle('shell:open-external', async (_evt, url: string) => {
+  try { shell.openExternal(String(url || '')); return true } catch { return false }
 })
 
-// AWS Profile management
-ipcMain.handle('aws:get-profiles', async () => {
+// Explicit SSO device authorization login using JSON config
+ipcMain.handle('aws:sso-login', async () => {
   try {
-    const awsConfigPath = path.join(os.homedir(), '.aws', 'config')
-
-    if (!fs.existsSync(awsConfigPath)) {
-      return "no_cloudpass_account"
+    const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+    if (!cfg?.ssoStartUrl || !cfg?.ssoRegion || !cfg?.ssoAccountId || !cfg?.ssoRoleName) throw new Error('Missing SSO config')
+    const oidc = new SSOOIDCClient({ region: cfg.ssoRegion })
+    const reg = await oidc.send(new RegisterClientCommand({ clientName: 'cloudpass-app', clientType: 'public' }))
+    const started = await oidc.send(new StartDeviceAuthorizationCommand({ clientId: reg.clientId!, clientSecret: reg.clientSecret!, startUrl: cfg.ssoStartUrl }))
+    if (started.verificationUriComplete) {
+      try { await shell.openExternal(started.verificationUriComplete) } catch {}
     }
-
-    const configContent = fs.readFileSync(awsConfigPath, 'utf-8')
-    const profiles: Record<string, string> = {}
-    let foundCloudpass = false
-
-    // Parse AWS config file for profiles
-    const lines = configContent.split('\n')
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed.startsWith('[profile ')) {
-        const profileName = trimmed.substring('[profile '.length, trimmed.length - 1)
-        if (profileName.toLowerCase().includes('cloudpass')) {
-          profiles[profileName] = profileName
-          foundCloudpass = true
+    const intervalMs = (started.interval ? Number(started.interval) : 5) * 1000
+    let accessToken: string | undefined
+    const deadline = Date.now() + 10 * 60 * 1000
+    while (!accessToken) {
+      if (Date.now() > deadline) throw new Error('SSO login timed out')
+      await new Promise((r) => setTimeout(r, intervalMs))
+      try {
+        const token = await oidc.send(new CreateTokenCommand({
+          clientId: reg.clientId!,
+          clientSecret: reg.clientSecret!,
+          grantType: 'urn:ietf:params:oauth:grant-type:device_code',
+          deviceCode: started.deviceCode!,
+        }))
+        if (token && token.accessToken) accessToken = token.accessToken
+      } catch (e: any) {
+        const code = e?.name || e?.Code || ''
+        if (code === 'AuthorizationPendingException' || code === 'SlowDownException') {
+          continue
         }
-      } else if (trimmed === '[default]') {
-        if ('default'.includes('cloudpass')) {
-          profiles.default = 'Default'
-          foundCloudpass = true
-        }
+        throw e
       }
     }
-
-    if (!foundCloudpass || Object.keys(profiles).length === 0) {
-      return "no_cloudpass_account"
-    }
-
-    return profiles
-  } catch (error) {
-    console.error('Failed to read AWS profiles:', error)
-    return "no_cloudpass_account"
-  }
-})
-
-// Run AWS SSO login in a child process
-ipcMain.handle('aws:sso-login', async (_evt, profile: string) => {
-  try {
-    ensureAwsEnv()
-    const env = { ...process.env, AWS_PROFILE: profile }
-    const awsCli = resolveAwsCliPath()
-    if (!awsCli) {
-      throw new Error('AWS CLI not found. Install AWS CLI v2 and/or set AWS_CLI_PATH to the aws binary.')
-    }
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(awsCli, ['sso', 'login', '--profile', profile], { env, stdio: 'ignore' })
-      child.on('error', reject)
-      child.on('exit', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`aws sso login exited with code ${code}`))
-      })
-    })
+    if (!accessToken) throw new Error('No access token')
+    const sso = new SSOClient({ region: cfg.ssoRegion })
+    const creds = await sso.send(new GetRoleCredentialsCommand({ accountId: cfg.ssoAccountId!, roleName: cfg.ssoRoleName!, accessToken }))
+    const c = creds.roleCredentials
+    if (!c?.accessKeyId || !c?.secretAccessKey || !c?.sessionToken || !c?.expiration) throw new Error('Invalid role credentials')
+    store.set('cloudpassSessionCreds', {
+      accessKeyId: c.accessKeyId,
+      secretAccessKey: c.secretAccessKey,
+      sessionToken: c.sessionToken,
+      expiration: Number(c.expiration),
+      accountId: cfg.ssoAccountId,
+      roleName: cfg.ssoRoleName,
+      obtainedAt: Date.now(),
+    } as any)
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message || 'SSO failed' }
   }
 })
 
-// Get AWS account id via AWS CLI (avoids bundling extra SDK client)
-ipcMain.handle('aws:get-account', async (_evt, profile?: string) => {
+
+// AWS STS caller identity for per-user identity in SSM namespacing
+ipcMain.handle('aws:get-user-identity', async () => {
   try {
-    ensureAwsEnv()
-    const env = { ...process.env }
-    if (profile && profile !== 'default') {
-      env.AWS_PROFILE = profile
-    } else {
-      delete env.AWS_PROFILE
+    const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
+    const sess = (store.get('cloudpassSessionCreds') as any) || null
+    const now = Date.now()
+    const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
+    
+    if (!hasSess && !cfg) {
+      throw new Error('No AWS configuration or session available')
     }
-    const awsCli = resolveAwsCliPath()
-    if (!awsCli) {
-      throw new Error('AWS CLI not found. Install AWS CLI v2 and/or set AWS_CLI_PATH to the aws binary.')
-    }
-    const output: string = await new Promise((resolve, reject) => {
-      execFile(awsCli, ['sts', 'get-caller-identity', '--output', 'json'], { env }, (error, stdout) => {
-        if (error) return reject(error)
-        resolve(stdout || '')
+    
+    const effectiveAuth = hasSess ? ({ 
+      type: 'keys', 
+      accessKeyId: sess.accessKeyId, 
+      secretAccessKey: sess.secretAccessKey, 
+      sessionToken: sess.sessionToken 
+    } as any) : cfg
+    
+    // Use the same region as configured, fallback to us-east-1 for STS
+    const region = cfg?.region || cfg?.ssoRegion || 'us-east-1'
+    
+    let stsClient: STSClient
+    if (effectiveAuth && effectiveAuth.type === 'keys' && effectiveAuth.accessKeyId && effectiveAuth.secretAccessKey) {
+      stsClient = new STSClient({
+        region,
+        credentials: {
+          accessKeyId: String(effectiveAuth.accessKeyId),
+          secretAccessKey: String(effectiveAuth.secretAccessKey),
+          sessionToken: effectiveAuth.sessionToken ? String(effectiveAuth.sessionToken) : undefined,
+        },
       })
-    })
-    const parsed = JSON.parse(output || '{}') as { Account?: string }
-    return parsed?.Account || null
-  } catch (e) {
-    return null
-  }
-})
-
-// Read region default from ~/.aws/config under the selected profile.
-ipcMain.handle('aws:get-default-region', async (_evt, profile?: string) => {
-  try {
-    const awsConfigPath = path.join(os.homedir(), '.aws', 'config')
-    if (!fs.existsSync(awsConfigPath)) return null
-    const cfgRaw = fs.readFileSync(awsConfigPath, 'utf-8')
-    const parsed = parseIni(cfgRaw)
-    const profileKey = profile && profile !== 'default' ? `profile ${profile}` : 'default'
-    const prof = parsed?.[profileKey]
-    if (prof && typeof prof.region === 'string' && prof.region.trim().length > 0) {
-      return prof.region.trim()
+    } else if (effectiveAuth && effectiveAuth.type === 'sso' && effectiveAuth.ssoStartUrl && effectiveAuth.ssoRegion && effectiveAuth.ssoAccountId && effectiveAuth.ssoRoleName) {
+      const { fromSSO } = await import('@aws-sdk/credential-providers')
+      stsClient = new STSClient({
+        region,
+        credentials: fromSSO({
+          startUrl: String(effectiveAuth.ssoStartUrl),
+          region: String(effectiveAuth.ssoRegion),
+          accountId: String(effectiveAuth.ssoAccountId),
+          roleName: String(effectiveAuth.ssoRoleName),
+        } as any),
+      })
+    } else {
+      throw new Error('Invalid AWS configuration')
     }
-    // Try AWS CLI for robustness
-    try {
-      const awsCli = resolveAwsCliPath()
-      if (awsCli) {
-        const args = ['configure', 'get', 'region']
-        if (profile && profile !== 'default') args.push('--profile', profile)
-        const output = execFileSync(awsCli, args, { encoding: 'utf8' }).trim()
-        if (output) return output
-      }
-    } catch {}
-    // Fallback: environment or common default
-    if (process.env.AWS_REGION && process.env.AWS_REGION.trim()) return process.env.AWS_REGION.trim()
-    if (process.env.AWS_DEFAULT_REGION && process.env.AWS_DEFAULT_REGION.trim()) return process.env.AWS_DEFAULT_REGION.trim()
-    return 'us-east-1'
-  } catch {
-    return 'us-east-1'
+    
+    const result = await stsClient.send(new GetCallerIdentityCommand({}))
+    const userId = result.UserId
+    
+    if (!userId) {
+      throw new Error('No UserId in STS response')
+    }
+    
+    // Split on ":" and take the second part (index 1)
+    const userIdParts = userId.split(':')
+    const extractedUserId = userIdParts.length > 1 ? userIdParts[1] : userId
+    
+    console.log('🔍 AWS STS caller identity:', { 
+      fullUserId: userId, 
+      extractedUserId,
+      account: result.Account,
+      arn: result.Arn 
+    })
+    
+    return extractedUserId
+  } catch (e: any) {
+    console.error('❌ Failed to get AWS user identity:', e.message)
+    throw new Error(`Unable to determine user identity from AWS STS: ${e.message}`)
   }
-})
-
-
-// OS username for per-user identity in offline mode and SSM namespacing
-ipcMain.handle('os:get-username', async () => {
-  try {
-    const info = os.userInfo()
-    const uname = info && typeof info.username === 'string' ? info.username.trim() : ''
-    if (uname.length > 0) return uname
-  } catch {}
-  try {
-    const who = execFileSync('/usr/bin/whoami', [], { encoding: 'utf8' }).trim()
-    if (who.length > 0) return who
-  } catch {}
-  const envName = (process.env.USER || process.env.LOGNAME || '').trim()
-  if (envName.length > 0) return envName
-  try {
-    dialog.showErrorBox('CloudPass', 'Unable to determine the OS username. Please ensure your macOS user account has a valid short name and try again.')
-  } catch {}
-  return ''
 })
 
 // Clipboard write handler to avoid using clipboard in preload under sandbox

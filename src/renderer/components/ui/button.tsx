@@ -9,9 +9,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm hover:shadow-md active:shadow-sm',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary-hover border border-border shadow-xs hover:shadow-sm',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary-hover border-2 border-border shadow-sm hover:shadow-md',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
-        outline: 'border border-border bg-background hover:bg-accent hover:text-accent-foreground shadow-xs hover:shadow-sm',
+        outline: 'border-2 border-border bg-background hover:bg-accent hover:text-accent-foreground shadow-sm hover:shadow-md',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow-md active:shadow-sm',
         success: 'bg-success text-success-foreground hover:bg-success/90 shadow-sm hover:shadow-md active:shadow-sm',
         warning: 'bg-warning text-warning-foreground hover:bg-warning/90 shadow-sm hover:shadow-md active:shadow-sm',

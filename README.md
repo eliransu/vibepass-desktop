@@ -7,7 +7,7 @@ Secure, modern, local‑first password manager with enterprise options. Built wi
 - Local AES‑256 encryption with PBKDF2 (100k iterations)
 - Per‑vault consolidated storage via AWS Secrets Manager (encrypted blob)
 - Lightweight metadata in Firebase Firestore (optional)
-- Multiple vaults: personal, work, and custom
+- Multiple vaults: personal and work
 - macOS notarized builds (hardened runtime, entitlements)
 
 ### Why cloudpass.dev
