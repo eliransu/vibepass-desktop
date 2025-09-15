@@ -31,8 +31,9 @@ function Content(): React.JSX.Element {
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
+  const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
   const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
-  const isSsoMissingOrExpired = !awsAccountId
+  const isSsoMissingOrExpired = !!ssoRequired || !awsAccountId
   const [_createItem] = useCreateMutation()
   const [_updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -348,7 +349,6 @@ function Content(): React.JSX.Element {
   }
 
   async function decodeFromDataUrl(dataUrl: string): Promise<void> {
-    console.log('decodeFromDataUrl', dataUrl)
     try {
       // Try jsQR at multiple scales
       const img = new Image()

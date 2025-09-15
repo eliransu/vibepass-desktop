@@ -22,7 +22,7 @@ const store = new Store<{ [key: string]: unknown }>({ name: 'cloudpass' })
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1024,
+    width: 1100,
     height: 720,
     show: false,
     webPreferences: {
@@ -284,7 +284,6 @@ ipcMain.handle('team:list-app', async (_evt, region: string, _profile?: string) 
 
 // Get a secret value by ARN/id
 ipcMain.handle('team:get-secret-value', async (_evt, region: string, secretId: string, _profile?: string) => {
-  console.log('🔍 team:get-secret-value called for:', secretId, 'in region:', region)
   const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
   const sess = (store.get('cloudpassSessionCreds') as any) || null
   const now = Date.now()
@@ -302,13 +301,11 @@ ipcMain.handle('vault:read', async (_evt, region: string, name: string, _profile
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
   const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
   const client = createSecretsClient(region, effectiveAuth)
-  console.log('🔍 vault:read called for:', name, 'in region:', region)
   try {
     const result = await getSecret(client, name)
-    console.log('✅ vault:read success:', name, result ? `(${result.length} chars)` : 'NULL')
     return { success: true, data: result ?? null }
   } catch (e: any) {
-    console.log('❌ vault:read error:', name, 'Error details:', JSON.stringify({
+    console.error('vault:read error:', name, 'Error details:', JSON.stringify({
       name: e.name,
       __type: e.__type,
       code: e.code,
@@ -376,10 +373,10 @@ ipcMain.handle('shell:open-external', async (_evt, url: string) => {
 ipcMain.handle('aws:sso-login', async () => {
   try {
     const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-    if (!cfg?.ssoStartUrl || !cfg?.ssoRegion || !cfg?.ssoAccountId || !cfg?.ssoRoleName) throw new Error('Missing SSO config')
-    const oidc = new SSOOIDCClient({ region: cfg.ssoRegion })
+    if (!cfg?.loginUrl || !cfg?.region || !cfg?.cloudAccountId || !cfg?.roleName) throw new Error('Missing SSO config')
+    const oidc = new SSOOIDCClient({ region: cfg.region })
     const reg = await oidc.send(new RegisterClientCommand({ clientName: 'cloudpass-app', clientType: 'public' }))
-    const started = await oidc.send(new StartDeviceAuthorizationCommand({ clientId: reg.clientId!, clientSecret: reg.clientSecret!, startUrl: cfg.ssoStartUrl }))
+    const started = await oidc.send(new StartDeviceAuthorizationCommand({ clientId: reg.clientId!, clientSecret: reg.clientSecret!, startUrl: cfg.loginUrl }))
     if (started.verificationUriComplete) {
       try { await shell.openExternal(started.verificationUriComplete) } catch {}
     }
@@ -406,8 +403,8 @@ ipcMain.handle('aws:sso-login', async () => {
       }
     }
     if (!accessToken) throw new Error('No access token')
-    const sso = new SSOClient({ region: cfg.ssoRegion })
-    const creds = await sso.send(new GetRoleCredentialsCommand({ accountId: cfg.ssoAccountId!, roleName: cfg.ssoRoleName!, accessToken }))
+    const sso = new SSOClient({ region: cfg.region })
+    const creds = await sso.send(new GetRoleCredentialsCommand({ accountId: cfg.cloudAccountId!, roleName: cfg.roleName!, accessToken }))
     const c = creds.roleCredentials
     if (!c?.accessKeyId || !c?.secretAccessKey || !c?.sessionToken || !c?.expiration) throw new Error('Invalid role credentials')
     store.set('cloudpassSessionCreds', {
@@ -415,8 +412,8 @@ ipcMain.handle('aws:sso-login', async () => {
       secretAccessKey: c.secretAccessKey,
       sessionToken: c.sessionToken,
       expiration: Number(c.expiration),
-      accountId: cfg.ssoAccountId,
-      roleName: cfg.ssoRoleName,
+      accountId: cfg.cloudAccountId,
+      roleName: cfg.roleName,
       obtainedAt: Date.now(),
     } as any)
     return { ok: true }
@@ -438,18 +435,23 @@ ipcMain.handle('aws:get-user-identity', async () => {
       throw new Error('No AWS configuration or session available')
     }
     
-    const effectiveAuth = hasSess ? ({ 
-      type: 'keys', 
-      accessKeyId: sess.accessKeyId, 
-      secretAccessKey: sess.secretAccessKey, 
-      sessionToken: sess.sessionToken 
+    // If SSO config is present but no active session, instruct renderer to log in
+    if (!hasSess && cfg && cfg.loginUrl && cfg.cloudAccountId && cfg.roleName) {
+      return { ok: false, error: 'SSO session required', code: 'SessionRequired' }
+    }
+
+    const effectiveAuth = hasSess ? ({
+      type: 'keys',
+      accessKeyId: sess.accessKeyId,
+      secretAccessKey: sess.secretAccessKey,
+      sessionToken: sess.sessionToken
     } as any) : cfg
     
     // Use the same region as configured, fallback to us-east-1 for STS
-    const region = cfg?.region || cfg?.ssoRegion || 'us-east-1'
+    const region = cfg?.region || 'us-east-1'
     
     let stsClient: STSClient
-    if (effectiveAuth && effectiveAuth.type === 'keys' && effectiveAuth.accessKeyId && effectiveAuth.secretAccessKey) {
+    if (effectiveAuth && effectiveAuth.accessKeyId && effectiveAuth.secretAccessKey) {
       stsClient = new STSClient({
         region,
         credentials: {
@@ -457,17 +459,6 @@ ipcMain.handle('aws:get-user-identity', async () => {
           secretAccessKey: String(effectiveAuth.secretAccessKey),
           sessionToken: effectiveAuth.sessionToken ? String(effectiveAuth.sessionToken) : undefined,
         },
-      })
-    } else if (effectiveAuth && effectiveAuth.type === 'sso' && effectiveAuth.ssoStartUrl && effectiveAuth.ssoRegion && effectiveAuth.ssoAccountId && effectiveAuth.ssoRoleName) {
-      const { fromSSO } = await import('@aws-sdk/credential-providers')
-      stsClient = new STSClient({
-        region,
-        credentials: fromSSO({
-          startUrl: String(effectiveAuth.ssoStartUrl),
-          region: String(effectiveAuth.ssoRegion),
-          accountId: String(effectiveAuth.ssoAccountId),
-          roleName: String(effectiveAuth.ssoRoleName),
-        } as any),
       })
     } else {
       throw new Error('Invalid AWS configuration')
@@ -484,17 +475,12 @@ ipcMain.handle('aws:get-user-identity', async () => {
     const userIdParts = userId.split(':')
     const extractedUserId = userIdParts.length > 1 ? userIdParts[1] : userId
     
-    console.log('🔍 AWS STS caller identity:', { 
-      fullUserId: userId, 
-      extractedUserId,
-      account: result.Account,
-      arn: result.Arn 
-    })
-    
-    return extractedUserId
+    return { ok: true, userId: extractedUserId }
   } catch (e: any) {
-    console.error('❌ Failed to get AWS user identity:', e.message)
-    throw new Error(`Unable to determine user identity from AWS STS: ${e.message}`)
+    const code = e?.name || e?.code || 'UnknownError'
+    const message = e?.message || 'Unknown error'
+    console.error('❌ Failed to get AWS user identity:', message)
+    return { ok: false, error: `Unable to determine user identity from AWS STS: ${message}`, code }
   }
 })
 

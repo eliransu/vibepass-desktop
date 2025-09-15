@@ -11,14 +11,17 @@ import 'ace-builds/src-noconflict/mode-json'
 import 'ace-builds/src-noconflict/theme-github'
 import 'ace-builds/src-noconflict/theme-monokai'
 import 'ace-builds/src-noconflict/ext-language_tools'
+import { useSafeToast } from '../../hooks/useSafeToast'
   
 export function TopBar(): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [theme, setTheme] = useState<string>(() => localStorage.getItem('theme') || 'dark')
   const user = useSelector((s: RootState) => s.auth.user)
   // Keep account id in store; UI does not directly use it here
-  useSelector((s: RootState) => s.ui.awsAccountId)
+  const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
+  const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
   const dispatch = useDispatch()
+  const { showToast } = useSafeToast()
   const [showProfileError, setShowProfileError] = useState(false)
   const [config, setConfig] = useState<any | null>(null)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
@@ -39,8 +42,8 @@ export function TopBar(): React.JSX.Element {
 
   const persistFromConfig = useCallback(async (cfg: any | null) => {
     if (!cfg) return
-    const region = cfg?.region || cfg?.ssoRegion
-    const accountId = cfg?.accountId || cfg?.ssoAccountId
+    const region = cfg?.region
+    const accountId = cfg?.cloudAccountId
     const team = (cfg?.team || '') as string
     const department = (cfg?.department || '') as string
     if (region) {
@@ -93,43 +96,43 @@ export function TopBar(): React.JSX.Element {
       return { isValid: false, error: 'Configuration must be an object' }
     }
 
-    const type = parsed.type
-    if (type !== 'sso' && type !== 'keys') {
-      return { isValid: false, error: 'Type must be either "sso" or "keys"' }
-    }
-
     // Department is mandatory for all configurations
     if (!parsed.department || typeof parsed.department !== 'string') {
       return { isValid: false, error: 'department is required' }
     }
 
-    if (type === 'sso') {
-      if (!parsed.ssoStartUrl || typeof parsed.ssoStartUrl !== 'string') {
-        return { isValid: false, error: 'ssoStartUrl is required for SSO type' }
+    // Check if it's SSO configuration (has loginUrl) or keys configuration
+    const hasSSO = parsed.loginUrl || parsed.cloudAccountId || parsed.roleName
+    const hasKeys = parsed.accessKeyId || parsed.secretAccessKey
+
+    if (hasSSO) {
+      if (!parsed.loginUrl || typeof parsed.loginUrl !== 'string') {
+        return { isValid: false, error: 'loginUrl is required for SSO configuration' }
       }
-      if (!parsed.ssoRegion || typeof parsed.ssoRegion !== 'string') {
-        return { isValid: false, error: 'ssoRegion is required for SSO type' }
+      if (!parsed.cloudAccountId || typeof parsed.cloudAccountId !== 'string') {
+        return { isValid: false, error: 'cloudAccountId is required for SSO configuration' }
       }
-      if (!parsed.ssoAccountId || typeof parsed.ssoAccountId !== 'string') {
-        return { isValid: false, error: 'ssoAccountId is required for SSO type' }
-      }
-      if (!parsed.ssoRoleName || typeof parsed.ssoRoleName !== 'string') {
-        return { isValid: false, error: 'ssoRoleName is required for SSO type' }
+      if (!parsed.roleName || typeof parsed.roleName !== 'string') {
+        return { isValid: false, error: 'roleName is required for SSO configuration' }
       }
       try {
-        new URL(parsed.ssoStartUrl)
+        new URL(parsed.loginUrl)
       } catch {
-        return { isValid: false, error: 'ssoStartUrl must be a valid URL' }
+        return { isValid: false, error: 'loginUrl must be a valid URL' }
       }
     }
 
-    if (type === 'keys') {
+    if (hasKeys) {
       if (!parsed.accessKeyId || typeof parsed.accessKeyId !== 'string') {
-        return { isValid: false, error: 'accessKeyId is required for keys type' }
+        return { isValid: false, error: 'accessKeyId is required for keys configuration' }
       }
       if (!parsed.secretAccessKey || typeof parsed.secretAccessKey !== 'string') {
-        return { isValid: false, error: 'secretAccessKey is required for keys type' }
+        return { isValid: false, error: 'secretAccessKey is required for keys configuration' }
       }
+    }
+
+    if (!hasSSO && !hasKeys) {
+      return { isValid: false, error: 'Configuration must have either SSO fields (loginUrl, cloudAccountId, roleName) or key fields (accessKeyId, secretAccessKey)' }
     }
 
     return { isValid: true }
@@ -144,26 +147,18 @@ export function TopBar(): React.JSX.Element {
       }
       return undefined
     }
-    const explicitType = (raw?.type || raw?.provider || '').toString().toLowerCase()
-    const inferred: 'sso' | 'keys' | undefined = explicitType.includes('sso')
-      ? 'sso'
-      : explicitType.includes('key')
-        ? 'keys'
-        : get(raw, ['accessKeyId', 'aws_access_key_id'])
-          ? 'keys'
-          : get(raw, ['ssoStartUrl', 'startUrl', 'sso_start_url'])
-            ? 'sso'
-            : undefined
-    const type: 'sso' | 'keys' = inferred || 'sso'
+    
+    // Determine configuration type based on available fields
+    const hasKeys = get(raw, ['accessKeyId', 'aws_access_key_id'])
+    
     const region = get(raw, ['region', 'ssoRegion', 'sso_region'])
-    const accountId = get(raw, ['accountId', 'ssoAccountId', 'sso_account_id'])
     const team = get(raw, ['team'])
     const department = get(raw, ['department'])
-    if (type === 'keys') {
+    
+    if (hasKeys) {
       return {
-        type: 'keys',
         region,
-        accountId,
+        cloudAccountId: get(raw, ['cloudAccountId', 'accountId', 'ssoAccountId', 'sso_account_id']),
         team,
         department,
         accessKeyId: get(raw, ['accessKeyId', 'aws_access_key_id']),
@@ -171,16 +166,15 @@ export function TopBar(): React.JSX.Element {
         sessionToken: get(raw, ['sessionToken', 'aws_session_token']),
       }
     }
+    
+    // Default to SSO configuration
     return {
-      type: 'sso',
       region,
-      accountId,
+      cloudAccountId: get(raw, ['cloudAccountId', 'ssoAccountId', 'accountId', 'sso_account_id']),
       team,
       department,
-      ssoStartUrl: get(raw, ['ssoStartUrl', 'startUrl', 'sso_start_url']),
-      ssoRegion: get(raw, ['ssoRegion', 'region', 'sso_region']),
-      ssoAccountId: get(raw, ['ssoAccountId', 'accountId', 'sso_account_id']),
-      ssoRoleName: get(raw, ['ssoRoleName', 'roleName', 'sso_role_name']),
+      loginUrl: get(raw, ['loginUrl', 'ssoStartUrl', 'startUrl', 'sso_start_url']),
+      roleName: get(raw, ['roleName', 'ssoRoleName', 'sso_role_name']),
     }
   }
 
@@ -189,11 +183,9 @@ export function TopBar(): React.JSX.Element {
       setConfigError(null)
       const latest = await window.cloudpass.configGet()
       const toFill = (latest ?? prefill) ?? {
-        type: 'sso',
-        ssoStartUrl: 'https://example.awsapps.com/start',
-        ssoRegion: 'us-east-1',
-        ssoAccountId: '123456789012',
-        ssoRoleName: 'AdministratorAccess',
+        loginUrl: 'https://example.awsapps.com/start',
+        cloudAccountId: '123456789012',
+        roleName: 'AdministratorAccess',
         region: 'us-east-1',
         department: 'engineering',
         team: 'backend'
@@ -201,11 +193,9 @@ export function TopBar(): React.JSX.Element {
       setConfigText(JSON.stringify(toFill, null, 2))
     } catch {
       const fallback = {
-        type: 'sso',
-        ssoStartUrl: 'https://example.awsapps.com/start',
-        ssoRegion: 'us-east-1',
-        ssoAccountId: '123456789012',
-        ssoRoleName: 'AdministratorAccess',
+        loginUrl: 'https://example.awsapps.com/start',
+        cloudAccountId: '123456789012',
+        roleName: 'AdministratorAccess',
         region: 'us-east-1',
         department: 'engineering',
         team: 'backend'
@@ -294,17 +284,25 @@ export function TopBar(): React.JSX.Element {
 
         {/* SSO Login */}
         <button
-          className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
+          className={`h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] ${(!awsAccountId || ssoRequired) ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border-destructive' : 'bg-secondary hover:bg-secondary-hover border-border'}`}
           onClick={async () => {
             try {
               const res = await window.cloudpass.awsSsoLogin()
               if (!res?.ok) {
+                // Notify user and fallback to opening SSO start URL if present
+                try { showToast(t('auth.ssoLoginFailed') as string, 'error') } catch {}
                 // Fallback: open SSO start URL if present
                 const latest = await window.cloudpass.configGet()
-                const url = latest?.ssoStartUrl || latest?.startUrl
+                const url = latest?.loginUrl
                 if (url) { await window.cloudpass.openExternal(url) }
               }
-            } catch {}
+              if (res?.ok) {
+                // After successful SSO, reload app to refresh queries and identity
+                setTimeout(() => { window.location.reload() }, 300)
+              }
+            } catch {
+              showToast(t('team.ssoLoginCta') as string, 'error')    
+            }
           }}
           title={t('team.ssoLogin') as string}
         >

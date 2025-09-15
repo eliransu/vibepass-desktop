@@ -8,6 +8,7 @@ type UiState = {
   awsRegion?: string
   awsProfile?: string
   awsAccountId?: string
+  ssoRequired: boolean
 }
 
 const initialState: UiState = {
@@ -19,6 +20,7 @@ const initialState: UiState = {
   awsRegion: undefined,
   awsProfile: typeof localStorage !== 'undefined' ? localStorage.getItem('awsProfile') || undefined : undefined,
   awsAccountId: typeof localStorage !== 'undefined' ? localStorage.getItem('awsAccountId') || undefined : undefined,
+  ssoRequired: false,
 }
 
 const slice = createSlice({
@@ -49,10 +51,13 @@ const slice = createSlice({
     setAwsAccountId(state, action: PayloadAction<string | undefined>) {
       state.awsAccountId = action.payload
     },
+    setSsoRequired(state, action: PayloadAction<boolean>) {
+      state.ssoRequired = action.payload
+    },
   },
 })
 
-export const { setSelectedItemId, setSearchQuery, setSelectedVaultId, toggleSidebar, setSidebarCollapsed, setAwsRegion, setAwsProfile, setAwsAccountId } = slice.actions
+export const { setSelectedItemId, setSearchQuery, setSelectedVaultId, toggleSidebar, setSidebarCollapsed, setAwsRegion, setAwsProfile, setAwsAccountId, setSsoRequired } = slice.actions
 export const uiReducer = slice.reducer
 
 

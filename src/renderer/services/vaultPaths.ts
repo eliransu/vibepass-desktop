@@ -13,9 +13,15 @@ export function resolveVaultContext(params: { uid: string; selectedVaultId: stri
   const { uid, selectedVaultId, email, regionOverride, accountIdOverride } = params
   // Region is provided by caller; do not read from storage
   const savedRegion = regionOverride || ''
+  if (!savedRegion) {
+    throw new Error('Region is required but not provided')
+  }
   const savedProfile = (typeof localStorage !== 'undefined' && localStorage.getItem('awsProfile'))
   const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
-  const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
+  const accountId = accountIdOverride || (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId'))
+  if (!accountId) {
+    throw new Error('AWS Account ID is required but not found in storage or provided as override')
+  }
 
   if (selectedVaultId === 'personal') {
     // {tenant}/{user_id}/personal
@@ -35,7 +41,10 @@ export function resolveVaultContext(params: { uid: string; selectedVaultId: stri
 export function getVaultSecretName(params: { uid: string; selectedVaultId: string; email?: string | null }): string {
   const { uid, selectedVaultId, email } = params
   const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
-  const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown'
+  const accountId = (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId'))
+  if (!accountId) {
+    throw new Error('AWS Account ID is required but not found in storage')
+  }
   const region = ''
   if (selectedVaultId === 'work') {
     return `cloudpass/${tenant}/${accountId}/${region}/department/vault`
@@ -50,7 +59,10 @@ export function getVaultSecretName(params: { uid: string; selectedVaultId: strin
 export function getVaultSecretNameWithOverrides(params: { uid: string; selectedVaultId: string; email?: string | null; regionOverride?: string; accountIdOverride?: string }): string {
   const { uid, selectedVaultId, email, regionOverride, accountIdOverride } = params
   const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
-  const accountId = accountIdOverride || ((typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId')) || 'unknown')
+  const accountId = accountIdOverride || (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId'))
+  if (!accountId) {
+    throw new Error('AWS Account ID is required but not found in storage or provided as override')
+  }
   const region = regionOverride || ''
   if (selectedVaultId === 'work') {
     const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'

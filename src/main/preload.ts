@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, desktopCapturer, screen } from 'electron'
 
 export type PreloadApi = {
   copyToClipboard: (text: string) => void
-  getAwsUserIdentity: () => Promise<string>
+  getAwsUserIdentity: () => Promise<{ ok: true; userId: string } | { ok: false; error: string; code?: string }>
   keytarSet: (service: string, account: string, secret: string) => Promise<boolean>
   keytarGet: (service: string, account: string) => Promise<string | null>
   biometricCheck: () => Promise<boolean>
@@ -21,7 +21,6 @@ export type PreloadApi = {
   teamCreate: (region: string, name: string, secretString: string, profile?: string) => Promise<string | undefined>
   teamUpdate: (region: string, id: string, secretString: string) => Promise<boolean>
   teamDelete: (region: string, id: string, force: boolean) => Promise<boolean>
-  teamListApp: (region: string, profile?: string) => Promise<Array<{ arn?: string; name?: string; description?: string; lastChangedDate?: string }>>
   teamGetSecretValue: (region: string, secretId: string, profile?: string) => Promise<string | null>
   // Consolidated vault secret helpers
   vaultRead: (region: string, name: string, profile?: string) => Promise<{ success: true; data: string | null } | { success: false; error: string; message: string }>
@@ -45,7 +44,7 @@ const api: PreloadApi = {
   copyToClipboard(text: string): void {
     void ipcRenderer.invoke('clipboard:write', text)
   },
-  async getAwsUserIdentity(): Promise<string> {
+  async getAwsUserIdentity(): Promise<{ ok: true; userId: string } | { ok: false; error: string; code?: string }> {
     return ipcRenderer.invoke('aws:get-user-identity')
   },
   async keytarSet(service: string, account: string, secret: string): Promise<boolean> {
@@ -98,9 +97,6 @@ const api: PreloadApi = {
   },
   async teamDelete(region: string, id: string, force: boolean): Promise<boolean> {
     return ipcRenderer.invoke('team:delete', region, id, force)
-  },
-  async teamListApp(region: string, profile?: string): Promise<Array<{ arn?: string; name?: string; description?: string; lastChangedDate?: string }>> {
-    return ipcRenderer.invoke('team:list-app', region, profile)
   },
   async teamGetSecretValue(region: string, secretId: string, profile?: string): Promise<string | null> {
     return ipcRenderer.invoke('team:get-secret-value', region, secretId, profile)

@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react'
 import { createHashRouter, RouterProvider, Navigate, Outlet, useNavigate, useRouteError } from 'react-router-dom'
-import { Provider } from 'react-redux'
+import { Provider, useDispatch } from 'react-redux'
 import { store } from '../shared/store'
 import { Shell } from './components/layout/Shell'
 import { ToastProvider } from './components/ui/toast-provider'
 import { MasterGate } from './features/security/MasterGate'
-import { useDispatch } from 'react-redux'
 import { setUser } from './features/auth/authSlice'
+import { setSsoRequired } from './features/ui/uiSlice'
 import { Icon } from './components/ui/icon'
 import { useSafeToast } from './hooks/useSafeToast'
 import { useTranslation } from 'react-i18next'
@@ -79,25 +79,34 @@ export function AppRouter(): React.JSX.Element {
           dispatch(setUser(null))
         }
       }
-      if (preload && typeof preload.getAwsUserIdentity === 'function') {
-        preload.getAwsUserIdentity().then((userId: string) => {
-          const username = (userId || '').trim()
-          if (username.length === 0) {
+      async function resolveIdentity(): Promise<void> {
+        if (!(preload && typeof preload.getAwsUserIdentity === 'function')) { applyUser(null); return }
+        try {
+          const res = await preload.getAwsUserIdentity() as { ok: true; userId: string } | { ok: false; error: string; code?: string }
+          if (res.ok === true) {
+            const username = (res.userId || '').trim()
+            if (username.length === 0) { applyUser(null); return }
+            applyUser({ uid: username, email: `${username}@cloudpass.aws`, displayName: username, photoURL: '' })
+            dispatch(setSsoRequired(false))
+            return
+          }
+          if (res.code === 'SessionRequired') {
+            const event = new CustomEvent('aws-identity-error', { detail: { message: 'SSO session required', code: 'SessionRequired' } })
+            window.dispatchEvent(event)
+            dispatch(setSsoRequired(true))
             applyUser(null)
             return
           }
-          applyUser({
-            uid: username,
-            email: `${username}@cloudpass.aws`,
-            displayName: username,
-            photoURL: ''
-          })
-        }).catch(() => {
+          const event = new CustomEvent('aws-identity-error', { detail: { message: res.error, code: res.code || 'UnknownError' } })
+          window.dispatchEvent(event)
           applyUser(null)
-        })
-      } else {
-        applyUser(null)
+        } catch (e: any) {
+          const event = new CustomEvent('aws-identity-error', { detail: { message: e?.message || 'Unknown error', code: e?.name || 'UnknownError' } })
+          window.dispatchEvent(event)
+          applyUser(null)
+        }
       }
+      void resolveIdentity()
     }, [dispatch])
     return (
       <ToastProvider>
@@ -118,18 +127,27 @@ function VaultErrorHandler(): React.JSX.Element {
   const { t } = useTranslation()
 
   useEffect(() => {
+    function handleAwsIdentityError(event: CustomEvent) {
+      const { message, code } = event.detail || {}
+      // Avoid duplicate toasts; Shell shows SessionRequired and SSO login failures
+      if (code === 'SessionRequired' || code === 'SsoLoginFailed') {
+        return
+      }
+      const display = `${t('errors.identityFailed') || 'Identity failed'}: ${message || code || 'Unknown error'}`
+      showToast(display, 'error')
+      console.error('❌ AWS Identity error:', code, message)
+    }
     function handleVaultAccessDenied(event: CustomEvent) {
       const { message, secretName } = event.detail
-      console.log('🚫 Received vault-access-denied event:', { message, secretName })
       showToast(`${t('errors.vaultAccessDenied')}: ${t('errors.vaultAccessDeniedDescription')}`, 'error')
       console.error('🚫 Vault access denied for:', secretName, '-', message)
     }
 
-    console.log('🔧 Setting up vault-access-denied event listener')
     window.addEventListener('vault-access-denied', handleVaultAccessDenied as EventListener)
+    window.addEventListener('aws-identity-error', handleAwsIdentityError as EventListener)
     return () => {
-      console.log('🔧 Removing vault-access-denied event listener')
       window.removeEventListener('vault-access-denied', handleVaultAccessDenied as EventListener)
+      window.removeEventListener('aws-identity-error', handleAwsIdentityError as EventListener)
     }
   }, [showToast, t])
 

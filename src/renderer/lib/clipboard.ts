@@ -78,14 +78,10 @@ export async function copyWithFeedback(
   if (success) {
     if (showToast) {
       showToast(successMessage, 'success')
-    } else {
-      console.log(successMessage)
     }
   } else {
     if (showToast) {
       showToast('Failed to copy to clipboard', 'error')
-    } else {
-      console.error('Failed to copy to clipboard')
     }
   }
 }

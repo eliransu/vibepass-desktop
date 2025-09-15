@@ -34,31 +34,7 @@ export const vaultApi = createApi({
           const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
           const isWork = selectedVaultId === 'work'
           
-          // Debug logging for team vault issues
-          if (isWork) {
-            const team = (typeof localStorage !== 'undefined' && (localStorage.getItem('team') || localStorage.getItem('department'))) || 'team'
-            console.log('🔍 Team vault debug:', {
-              secretName: name,
-              team,
-              region: regionOverride || region,
-              accountId: accountIdOverride
-            })
-            
-            // List all CloudPass secrets to help find the correct one
-            try {
-              const preload = (window as any).cloudpass as any
-              const secrets = await preload.teamListApp(regionOverride || region)
-              console.log('🗂️ All CloudPass secrets in this region:')
-              secrets.forEach((s: any) => {
-                console.log(`  - ${s.name} (${s.arn})`)
-                if (s.name && s.name.includes('vault')) {
-                  console.log(`    ↳ This looks like a vault secret!`)
-                }
-              })
-            } catch (e: any) {
-              console.log('❌ Could not list secrets:', e.message)
-            }
-          }
+          // Debug logging removed
           
           const preload = (window as any).cloudpass as any
           let consolidated: Record<string, VaultItem> = {}
@@ -73,10 +49,7 @@ export const vaultApi = createApi({
             
             // Handle AccessDeniedException
             if (!vaultResult.success) {
-              console.log('🚫 Vault read failed:', vaultResult)
               if (vaultResult.error === 'AccessDeniedException') {
-                console.log('🚫 Dispatching vault-access-denied event for:', name)
-                // Show toast error - we'll need to get access to the toast context
                 const event = new CustomEvent('vault-access-denied', { 
                   detail: { message: vaultResult.message, secretName: name } 
                 })
@@ -86,11 +59,9 @@ export const vaultApi = createApi({
             }
             
             let secret = vaultResult.data
-            console.log('🔍 vaultRead result for', name, ':', secret ? 'SUCCESS' : 'NULL/EMPTY', secret ? `(${secret.length} chars)` : '')
             
             // Try alternative method: direct secret access by ARN (if configured)
             if (!secret && isWork) {
-              console.log('🔄 Trying direct secret access by ARN...')
               // Build ARN from configuration instead of hardcoding
               const currentAccountId = accountIdOverride
               const currentRegion = regionOverride || region
@@ -101,16 +72,12 @@ export const vaultApi = createApi({
                 const arn = `arn:aws:secretsmanager:${currentRegion}:${currentAccountId}:secret:cloudpass/${tenant}/${currentAccountId}/${currentRegion}/${department}/vault-*`
                 try {
                   secret = await preload.teamGetSecretValue(currentRegion, arn, profileOverride || profile)
-                  if (secret) {
-                    console.log('✅ Direct ARN access worked!', `(${secret.length} chars)`)
-                  } else {
-                    console.log('❌ Direct ARN access also returned null')
-                  }
+                  // Removed verbose logs
                 } catch (e: any) {
-                  console.log('❌ Direct ARN access failed:', e.message)
+                  // Ignore direct ARN access failures
                 }
               } else {
-                console.log('❌ Cannot build ARN: missing account ID or region configuration')
+                // Missing account/region; skip
               }
             }
             
@@ -127,10 +94,8 @@ export const vaultApi = createApi({
                 name.replace('/applications/', '/department/')
               ]
               
-              console.log('🔍 Trying alternative secret names:')
               for (const altName of alternativeNames) {
                 if (altName !== name) {
-                  console.log(`  Trying: ${altName}`)
                   try {
                     const altResult = await preload.vaultRead(regionOverride || region, altName, profileOverride || profile)
                     if (!altResult) continue
@@ -144,10 +109,7 @@ export const vaultApi = createApi({
                       continue
                     }
                     secret = altResult.data
-                    if (secret) {
-                      console.log(`✅ Found data at: ${altName}`)
-                      break
-                    }
+                    if (secret) { break }
                   } catch {
                     // Continue trying
                   }
@@ -160,24 +122,13 @@ export const vaultApi = createApi({
                 consolidated = isWork
                   ? (JSON.parse(secret) as Record<string, VaultItem>)
                   : decryptJson<Record<string, VaultItem>>(secret, key)
-                
-                // Debug logging for successful retrieval
-                if (isWork) {
-                  console.log('✅ Team vault data found:', Object.keys(consolidated).length, 'items')
-                } else {
-                  console.log('✅ Personal vault data decrypted:', Object.keys(consolidated).length, 'items')
-                }
+                // Removed verbose success logs
               } catch (decryptError: any) {
                 console.error('❌ Decryption failed:', decryptError.message)
-                console.log('🔍 Secret length:', secret.length)
-                console.log('🔍 Secret preview (first 100 chars):', secret.substring(0, 100))
-                console.log('🔍 Is work vault:', isWork)
-                console.log('🔍 Master key length:', key ? key.length : 'no key')
                 
                 // Try to determine if the data is actually encrypted
                 try {
                   const parsed = JSON.parse(secret)
-                  console.log('🔍 Secret appears to be plain JSON, not encrypted')
                   consolidated = parsed as Record<string, VaultItem>
                 } catch {
                   console.error('❌ Secret is neither valid encrypted data nor valid JSON')
@@ -185,8 +136,7 @@ export const vaultApi = createApi({
                 }
               }
             } else if (isWork) {
-              console.log('❌ Team vault data not found at:', name)
-              console.log('💡 Check if your team name in localStorage matches the AWS secret path')
+              // Removed verbose not-found hints
             }
           }
           return { data: Object.values(consolidated) }

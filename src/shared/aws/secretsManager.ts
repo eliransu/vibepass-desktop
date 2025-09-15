@@ -2,17 +2,14 @@ import { SecretsManagerClient, GetSecretValueCommand, CreateSecretCommand, PutSe
 import { fromSSO } from '@aws-sdk/credential-providers'
 
 export type CloudPassConfig = {
-  type: 'sso' | 'keys'
   // Common
   region?: string
-  accountId?: string
+  cloudAccountId?: string
   team?: string
   department?: string
-  // SSO configuration (explicit, no ~/.aws/config)
-  ssoStartUrl?: string
-  ssoRegion?: string
-  ssoAccountId?: string
-  ssoRoleName?: string
+  // SSO configuration (explicit, no ~/.aws/config) - always default type
+  loginUrl?: string
+  roleName?: string
   // Static keys (optional session)
   accessKeyId?: string
   secretAccessKey?: string
@@ -21,7 +18,7 @@ export type CloudPassConfig = {
 
 export function createSecretsClient(region: string, auth?: CloudPassConfig | null): SecretsManagerClient {
   // Prefer explicit credentials/config and avoid any OS-based providers
-  if (auth && auth.type === 'keys' && auth.accessKeyId && auth.secretAccessKey) {
+  if (auth && auth.accessKeyId && auth.secretAccessKey) {
     return new SecretsManagerClient({
       region,
       credentials: {
@@ -31,14 +28,14 @@ export function createSecretsClient(region: string, auth?: CloudPassConfig | nul
       },
     })
   }
-  if (auth && auth.type === 'sso' && auth.ssoStartUrl && auth.ssoRegion && auth.ssoAccountId && auth.ssoRoleName) {
+  if (auth && auth.loginUrl && auth.cloudAccountId && auth.roleName) {
     return new SecretsManagerClient({
       region,
       credentials: fromSSO({
-        startUrl: String(auth.ssoStartUrl),
-        region: String(auth.ssoRegion),
-        accountId: String(auth.ssoAccountId),
-        roleName: String(auth.ssoRoleName),
+        startUrl: String(auth.loginUrl),
+        region: String(region), // Use the region parameter since ssoRegion was merged with region
+        accountId: String(auth.cloudAccountId),
+        roleName: String(auth.roleName),
       } as any),
     })
   }

@@ -10,7 +10,8 @@ export function useSafeToast() {
     // Return a no-op function if ToastProvider is not available
     return {
       showToast: (message: string, type?: 'success' | 'error') => {
-        console.log(`Toast: ${message} (${type || 'info'})`)
+        console.log('🚫 ToastProvider not available, showing toast:', message, type)
+        // no-op in environments without ToastProvider
       }
     }
   }

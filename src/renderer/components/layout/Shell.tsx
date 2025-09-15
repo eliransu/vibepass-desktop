@@ -1,18 +1,47 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { TopBar } from './TopBar'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
 import { setSelectedVaultId, toggleSidebar, setSelectedItemId, setSearchQuery } from '../../features/ui/uiSlice'
 import { IconButton } from '../ui/icon-button'
 import { Icon, PasswordIcon, ApiKeyIcon, NotesIcon, CardsIcon } from '../ui/icon'
+import { useSafeToast } from '../../hooks/useSafeToast'
 
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const sidebarCollapsed = useSelector((s: RootState) => s.ui.sidebarCollapsed)
   const selectedVaultId = useSelector((s: RootState) => s.ui.selectedVaultId)
+  const { showToast } = useSafeToast()
+
+  // Global AWS identity/SSO error notifications
+  useEffect(() => {
+    function onAwsIdentityError(e: Event): void {
+      try {
+        const detail = (e as CustomEvent).detail || {}
+        const code = String(detail.code || '')
+        const message = String(detail.message || '')
+        if (code === 'SessionRequired') {
+          showToast(t('team.ssoLoginCta') as string, 'error')
+          return
+        }
+        if (code === 'SsoLoginFailed') {
+          showToast(t('auth.ssoLoginFailed') as string, 'error')
+          return
+        }
+        showToast((message && message.length > 0) ? message : (t('errors.identityFailed') as string), 'error')
+      } catch {
+        showToast(t('errors.identityFailed') as string, 'error')
+      }
+    }
+
+    window.addEventListener('aws-identity-error', onAwsIdentityError as EventListener)
+    return () => {
+      window.removeEventListener('aws-identity-error', onAwsIdentityError as EventListener)
+    }
+  }, [showToast, t])
   
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr] bg-background">
@@ -157,10 +186,11 @@ function VaultsList(): React.JSX.Element {
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const selected = useSelector((s: RootState) => s.ui.selectedVaultId)
-  const user = useSelector((s: RootState) => s.auth.user)
+  // No auth guard for department label; read-only config
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const [departmentLabel, setDepartmentLabel] = useState<string>('')
+  const navigate = useNavigate()
 
   const baseItems = useMemo(() => ([
     { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
@@ -169,15 +199,18 @@ function VaultsList(): React.JSX.Element {
 
   useEffect(() => {
     ;(async () => {
-      if (!user?.uid) { return }
       try {
         const cfg = await (window as any).cloudpass?.configGet?.()
-        setDepartmentLabel((cfg?.department || '') as string)
+        const dep = (cfg?.department || localStorage.getItem('department') || '') as string
+        setDepartmentLabel(dep)
       } catch {
-        // ignore
+        try {
+          const dep = localStorage.getItem('department') || ''
+          setDepartmentLabel(dep)
+        } catch {}
       }
     })()
-  }, [user?.uid, user?.email, awsRegion, awsAccountId])
+  }, [awsRegion, awsAccountId])
 
 
   return (
@@ -186,10 +219,14 @@ function VaultsList(): React.JSX.Element {
         <button 
           key={vault.id} 
           onClick={() => {
+            const isSwitchingVault = selected !== vault.id
             dispatch(setSelectedVaultId(vault.id))
-            // Reset current selection and search when switching vaults
-            dispatch(setSelectedItemId(null))
-            dispatch(setSearchQuery(''))
+            if (isSwitchingVault) {
+              // Reset current selection and search when switching vaults
+              dispatch(setSelectedItemId(null))
+              dispatch(setSearchQuery(''))
+              navigate('/passwords')
+            }
           }} 
           className={`
             w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left interactive border
