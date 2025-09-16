@@ -6,6 +6,7 @@ export type CloudPassConfig = {
   region?: string
   cloudAccountId?: string
   team?: string
+  department?: string
   // SSO configuration (explicit, no ~/.aws/config) - always default type
   loginUrl?: string
   roleName?: string
@@ -47,7 +48,12 @@ export async function getSecret(client: SecretsManagerClient, secretId: string):
   return res.SecretString
 }
 
-export async function createSecret(client: SecretsManagerClient, name: string, secretString: string): Promise<string | undefined> {
+export async function createSecret(
+  client: SecretsManagerClient,
+  name: string,
+  secretString: string,
+  tags?: { team?: string; department?: string }
+): Promise<string | undefined> {
   // const parts = name.split('/')
   // const ownerCandidate = parts[4] || 'unknown'
   // const isWork = ownerCandidate === 'team' || name.includes('/team/')
@@ -61,6 +67,13 @@ export async function createSecret(client: SecretsManagerClient, name: string, s
       // { Key: 'OwnerUid', Value: ownerUid },
     ],
   } 
+  // if (tags?.team) {
+  //   ;(payload.Tags as Array<{ Key: string; Value: string }>).push({ Key: 'Team', Value: String(tags.team) })
+  // }
+  if (tags?.department) {
+    ;(payload.Tags as Array<{ Key: string; Value: string }>).push({ Key: 'Department', Value: String(tags.department) })
+  }
+  console.log('createSecret', payload)
   const res = await client.send(new CreateSecretCommand(payload))
   return res.ARN
 }
@@ -105,9 +118,9 @@ export async function listAppSecrets(client: SecretsManagerClient): Promise<Team
   return items
 }
 
-export async function upsertSecretByName(client: SecretsManagerClient, name: string, secretString: string): Promise<string | undefined> {
+export async function upsertSecretByName(client: SecretsManagerClient, name: string, secretString: string, tags?: { team?: string; department?: string }): Promise<string | undefined> {
   try {
-    return await createSecret(client, name, secretString)
+    return await createSecret(client, name, secretString, tags)
   } catch (e: any) {
     try {
       await putSecret(client, name, secretString)

@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState, store } from '../../../shared/store'
-import { setAwsRegion as setAwsRegionAction, setAwsAccountId, setStorageMode, setSelectedItemId, setSearchQuery, setSelectedVaultId } from '../../features/ui/uiSlice'
+import { setAwsRegion as setAwsRegionAction, setAwsAccountId, setStorageMode, setSelectedItemId, setSearchQuery, setSelectedVaultId, setSsoRequired } from '../../features/ui/uiSlice'
+import { setUser } from '../../features/auth/authSlice'
 import { vaultApi } from '../../services/vaultApi'
 import { IconButton } from '../ui/icon-button'
 import { Icon } from '../ui/icon'
@@ -329,8 +330,23 @@ export function TopBar(): React.JSX.Element {
                 if (url) { await window.cloudpass.openExternal(url) }
               }
               if (res?.ok) {
-                // After successful SSO, reload app to refresh queries and identity
-                setTimeout(() => { window.location.reload() }, 300)
+                // After successful SSO, refresh identity and data without full app reload
+                try {
+                  const preload = (window as any).cloudpass as any
+                  if (preload && typeof preload.getAwsUserIdentity === 'function') {
+                    const identity = await preload.getAwsUserIdentity() as { ok: true; userId: string } | { ok: false; error: string; code?: string }
+                    if ((identity as any)?.ok === true) {
+                      const username = String((identity as any).userId || '').trim()
+                      if (username.length > 0) {
+                        dispatch(setUser({ uid: username, email: `${username}@cloudpass.aws`, displayName: username, photoURL: '' }))
+                        dispatch(setSsoRequired(false))
+                      }
+                    } else {
+                      dispatch(setSsoRequired(false))
+                    }
+                  }
+                } catch {}
+                try { store.dispatch(vaultApi.util.resetApiState()) } catch {}
               }
             } catch {
               showToast(t('team.ssoLoginCta') as string, 'error')    

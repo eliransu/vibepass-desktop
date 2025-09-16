@@ -245,7 +245,9 @@ ipcMain.handle('team:create', async (_evt, region: string, name: string, secretS
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
   const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
   const client = createSecretsClient(region, effectiveAuth)
-  return createSecret(client, name, secretString)
+  const team = cfg?.team
+  const department = cfg?.department
+  return createSecret(client, name, secretString, { team, department })
 })
 
 ipcMain.handle('team:update', async (_evt, region: string, id: string, secretString: string, _profile?: string) => {
@@ -333,7 +335,7 @@ ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretS
   const client = createSecretsClient(region, effectiveAuth)
   // Prefer create; if already exists, fall back to update
   try {
-    await createSecret(client, name, secretString)
+    await createSecret(client, name, secretString, { team: cfg?.team, department: cfg?.department })
   } catch (e: any) {
     const code = e?.name || e?.code || ''
     const msg = e?.message || ''
