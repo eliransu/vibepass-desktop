@@ -5,17 +5,19 @@ import { useListQuery, useCreateMutation, useRemoveMutation, type VaultItem } fr
 import { useUpdateMutation } from '../services/vaultApi'
 import { MasterGate } from '../features/security/MasterGate'
 import jsQR from 'jsqr'
-import { HashAlgorithms, KeyEncodings } from '@otplib/core'
-import { createDigest } from '@otplib/plugin-crypto-js'
 import { useTranslation } from 'react-i18next'
 import { decryptJson } from '../../shared/security/crypto'
 import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/ui/uiSlice'
-import { Input } from '../components/ui/input'
-import { Button } from '../components/ui/button'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
 import { Icon } from '../components/ui/icon'
 import { copyWithFeedback } from '../lib/clipboard'
 import { useSafeToast } from '../hooks/useSafeToast'
+import { resolveVaultContext } from '../services/vaultPaths'
+import { PasswordListPane } from './passwords/PasswordListPane'
+import { PasswordForm, type PasswordFormData } from './passwords/PasswordForm'
+import { PasswordDetails } from './passwords/PasswordDetails'
+import { generateTotp, parseOtpMetaFromItem } from '../lib/otp'
+import { mergeKnownTags, dedupeTags } from '../lib/tags'
 
 function Content(): React.JSX.Element {
   const { t } = useTranslation()
@@ -31,33 +33,78 @@ function Content(): React.JSX.Element {
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
   const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
-  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
-  const isSsoMissingOrExpired = !!ssoRequired || !awsAccountId
+  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key, refetchOnMountOrArgChange: true, refetchOnFocus: true, refetchOnReconnect: true })
+  const isSsoMissingOrExpired = storageMode === 'cloud' && (!!ssoRequired || !awsAccountId)
   const [_createItem] = useCreateMutation()
   const [_updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
 
-  const passwords = useMemo(() => (data ?? [])
-    .filter(i => (i.category ?? 'passwords') === 'passwords')
-    .filter(i => !search || i.title.toLowerCase().includes(search.toLowerCase()) || (i.username ?? '').toLowerCase().includes(search.toLowerCase()))
-  , [data, search])
+  const passwords = useMemo(() => {
+    const list = (data ?? []).filter(i => (i.category ?? 'passwords') === 'passwords')
+    if (!search) return list
+    const q = search.toLowerCase().trim().replace(/^#/, '')
+    return list.filter(i => {
+      const inTitle = (i.title || '').toLowerCase().includes(q)
+      const inUser = (i.username || '').toLowerCase().includes(q)
+      const inTags = Array.isArray(i.tags) && i.tags.some(tag => tag.toLowerCase().replace(/^#/, '').includes(q))
+      return inTitle || inUser || inTags
+    })
+  }, [data, search])
 
   const selectedItem = useMemo(() => {
     if (!selectedId) return null
     return passwords.find(x => x.id === selectedId) ?? null
   }, [passwords, selectedId])
 
+  // Resolve freshest value from remote when in cloud mode
+  const [resolvedItem, setResolvedItem] = useState<VaultItem | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadRemote(): Promise<void> {
+      try {
+        if (!selectedItem || storageMode !== 'cloud' || !selectedItem.ssmArn || !uid || !key) {
+          setResolvedItem(null)
+          return
+        }
+        const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
+        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, selectedItem.ssmArn, awsProfile || profile)
+        if (cancelled) return
+        if (secret) {
+          try {
+            const decrypted = decryptJson<VaultItem>(secret, key)
+            setResolvedItem({ ...decrypted, id: selectedItem.id, ssmArn: selectedItem.ssmArn })
+          } catch {
+            setResolvedItem(null)
+          }
+        } else {
+          setResolvedItem(null)
+        }
+      } catch {
+        setResolvedItem(null)
+      }
+    }
+    void loadRemote()
+    return () => { cancelled = true }
+  }, [selectedItem, selectedItem?.id, selectedItem?.ssmArn, storageMode, uid, key, selectedVaultId, email, awsRegion, awsProfile])
+
+  // Reset local UI state immediately when storage mode changes
+  useEffect(() => {
+    try {
+      setShowCreateForm(false)
+      setEditingPassword(null)
+      setResolvedItem(null)
+      dispatch(setSelectedItemId(null))
+      dispatch(setSearchQuery(''))
+    } catch {}
+  }, [storageMode, dispatch])
+
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingPassword, setEditingPassword] = useState<VaultItem | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, item: VaultItem | null}>({isOpen: false, item: null})
-  const [formData, setFormData] = useState({
-    title: '',
-    username: '',
-    password: '',
-    url: '',
-    notes: ''
-  })
+  const [formData, setFormData] = useState<PasswordFormData>({ title: '', username: '', password: '', url: '', notes: '', tags: [] })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -81,77 +128,7 @@ function Content(): React.JSX.Element {
   const [displaySize, setDisplaySize] = useState<{w: number; h: number}>({ w: 0, h: 0 })
   const [selection, setSelection] = useState<{x: number; y: number; w: number; h: number} | null>(null)
   const [dragStart, setDragStart] = useState<{x: number; y: number} | null>(null)
-  // Browser-safe Base32 decoder and createHmacKey for otplib v12
-  function base32DecodeToBytes(input: string): Uint8Array {
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-    const cleaned = (input || '').toUpperCase().replace(/=+|\s+/g, '')
-    let buffer = 0
-    let bits = 0
-    const out: number[] = []
-    for (let i = 0; i < cleaned.length; i++) {
-      const val = alphabet.indexOf(cleaned[i])
-      if (val < 0) continue
-      buffer = (buffer << 5) | val
-      bits += 5
-      if (bits >= 8) {
-        bits -= 8
-        out.push((buffer >> bits) & 0xff)
-      }
-    }
-    return new Uint8Array(out)
-  }
-  function bytesToHex(bytes: Uint8Array): string {
-    let hex = ''
-    for (let i = 0; i < bytes.length; i++) {
-      const b = bytes[i]
-      hex += (b < 16 ? '0' : '') + b.toString(16)
-    }
-    return hex
-  }
-  const createTotpHmacKey = useCallback((algorithm: HashAlgorithms, secretBase32: string, _encoding: KeyEncodings): string => {
-    const raw = base32DecodeToBytes(secretBase32)
-    const minBytes = algorithm === HashAlgorithms.SHA1 ? 20 : algorithm === HashAlgorithms.SHA256 ? 32 : 64
-    if (raw.length === 0) return ''.padEnd(minBytes * 2, '0')
-    let hex = bytesToHex(raw)
-    const needed = minBytes * 2
-    if (hex.length < needed) {
-      const repeat = Math.ceil(needed / hex.length)
-      hex = (hex.repeat(repeat)).slice(0, needed)
-    } else if (hex.length > needed) {
-      hex = hex.slice(0, needed)
-    }
-    return hex
-  }, [])
-  function hexToBytes(hex: string): Uint8Array {
-    const clean = (hex || '').replace(/[^0-9a-f]/gi, '')
-    const len = Math.floor(clean.length / 2)
-    const out = new Uint8Array(len)
-    for (let i = 0; i < len; i++) {
-      out[i] = parseInt(clean.substr(i * 2, 2), 16)
-    }
-    return out
-  }
-  function padStartStr(value: string, length: number, fill: string): string {
-    if (value.length >= length) return value
-    return (new Array(length - value.length + 1).join(fill) + value).slice(-length)
-  }
-  const generateTotp = useCallback((secretBase32: string, opts: { digits: number; algorithm: string; step: number; epoch: number }): string => {
-    const digits = opts.digits
-    const algLower = String(opts.algorithm || 'sha1').toLowerCase()
-    const algorithm = (algLower === 'sha256' ? HashAlgorithms.SHA256 : algLower === 'sha512' ? HashAlgorithms.SHA512 : HashAlgorithms.SHA1)
-    const epoch = opts.epoch
-    const step = opts.step
-    const counter = Math.floor(epoch / step / 1000)
-    const hexCounter = padStartStr(counter.toString(16), 16, '0')
-    const hmacKeyHex = createTotpHmacKey(algorithm, secretBase32, KeyEncodings.UTF8)
-    const hexDigest = createDigest(algorithm, hmacKeyHex, hexCounter)
-    const bytes = hexToBytes(hexDigest)
-    const offset = bytes[bytes.length - 1] & 0x0f
-    const binary = ((bytes[offset] & 0x7f) << 24) | ((bytes[offset + 1] & 0xff) << 16) | ((bytes[offset + 2] & 0xff) << 8) | (bytes[offset + 3] & 0xff)
-    const modulo = Math.pow(10, digits)
-    const token = String(binary % modulo)
-    return padStartStr(token, digits, '0')
-  }, [createTotpHmacKey])
+  // OTP helpers moved to lib/otp
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
     try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
@@ -210,7 +187,8 @@ function Content(): React.JSX.Element {
       username: '',
       password: '',
       url: '',
-      notes: ''
+      notes: '',
+      tags: []
     })
     setShowCreateForm(false)
     setEditingPassword(null)
@@ -218,48 +196,7 @@ function Content(): React.JSX.Element {
     if (otpTimerRef.current) { window.clearInterval(otpTimerRef.current); otpTimerRef.current = null }
   }
 
-  function parseOtpMetaFromItem(item: VaultItem | null): { secret: string; digits: number; algorithm: string; step: number } | null {
-    if (!item) return null
-    try {
-      if (typeof item.notes === 'string' && item.notes.startsWith('otp:')) {
-        const parts = item.notes.replace(/^otp:/, '').split(';')
-        const map = Object.fromEntries(parts.map(kv => kv.split('='))) as any
-        const otpUrl = map.otpurl ? decodeURIComponent(map.otpurl) : ''
-        if (otpUrl && otpUrl.toLowerCase().startsWith('otpauth://')) {
-          const match = otpUrl.match(/[?&]secret=([^&]+)/i)
-          const secret = match ? decodeURIComponent(match[1]) : ''
-          const digitsMatch = otpUrl.match(/[?&]digits=(\d+)/i)
-          const algoMatch = otpUrl.match(/[?&]algorithm=([^&]+)/i)
-          const periodMatch = otpUrl.match(/[?&](period|step)=(\d+)/i)
-          const digits = digitsMatch ? Math.max(6, parseInt(digitsMatch[1], 10) || 6) : 6
-          const algorithm = (algoMatch ? (algoMatch[1] || 'SHA1') : 'SHA1').toUpperCase()
-          const step = periodMatch ? (parseInt(periodMatch[2] || periodMatch[1], 10) || 30) : 30
-          return { secret, digits, algorithm, step }
-        } else {
-          const secret = decodeURIComponent(map.secret || '')
-          const digits = Math.max(6, parseInt(map.digits || '6', 10) || 6)
-          const algorithm = String(map.algorithm || 'SHA1').toUpperCase()
-          const step = Math.max(5, parseInt(map.step || '30', 10) || 30)
-          return { secret, digits, algorithm, step }
-        }
-      }
-      if (typeof item.password === 'string' && item.password.toLowerCase().startsWith('otpauth://')) {
-        const otpUrl = item.password
-        const match = otpUrl.match(/[?&]secret=([^&]+)/i)
-        const secret = match ? decodeURIComponent(match[1]) : ''
-        const digitsMatch = otpUrl.match(/[?&]digits=(\d+)/i)
-        const algoMatch = otpUrl.match(/[?&]algorithm=([^&]+)/i)
-        const periodMatch = otpUrl.match(/[?&](period|step)=(\d+)/i)
-        const digits = digitsMatch ? Math.max(6, parseInt(digitsMatch[1], 10) || 6) : 6
-        const algorithm = (algoMatch ? (algoMatch[1] || 'SHA1') : 'SHA1').toUpperCase()
-        const step = periodMatch ? (parseInt(periodMatch[2] || periodMatch[1], 10) || 30) : 30
-        return { secret, digits, algorithm, step }
-      }
-    } catch {}
-    return null
-  }
-
-  const selectedOtpMeta = useMemo(() => parseOtpMetaFromItem(selectedItem), [selectedItem])
+  const selectedOtpMeta = useMemo(() => parseOtpMetaFromItem(resolvedItem ?? selectedItem), [resolvedItem, selectedItem])
 
   useEffect(() => {
     const meta = selectedOtpMeta
@@ -289,7 +226,7 @@ function Content(): React.JSX.Element {
     return () => {
       if (detailOtpTimerRef.current) { window.clearInterval(detailOtpTimerRef.current); detailOtpTimerRef.current = null }
     }
-  }, [selectedOtpMeta?.secret, selectedOtpMeta?.digits, selectedOtpMeta?.algorithm, selectedOtpMeta?.step, selectedOtpMeta, generateTotp])
+  }, [selectedOtpMeta?.secret, selectedOtpMeta?.digits, selectedOtpMeta?.algorithm, selectedOtpMeta?.step, selectedOtpMeta])
 
   // Deprecated in favor of desktop crop overlay
 
@@ -566,6 +503,7 @@ function Content(): React.JSX.Element {
       password: formData.password,
       url: formData.url,
       notes: formData.notes,
+      tags: dedupeTags(formData.tags || []),
       category: 'passwords' 
     }
     try {
@@ -577,6 +515,7 @@ function Content(): React.JSX.Element {
         const pr: any = _createItem({ uid, key, item, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
         await (pr?.unwrap ? pr.unwrap() : pr)
       }
+      try { mergeKnownTags(item.tags || []) } catch {}
       resetForm()
     } catch (e: any) {
       const msg = String(e?.data?.error ?? e?.error ?? e?.message ?? '')
@@ -597,7 +536,8 @@ function Content(): React.JSX.Element {
       username: password.username || '',
       password: password.password || '',
       url: password.url || '',
-      notes: password.notes || ''
+      notes: password.notes || '',
+      tags: Array.isArray(password.tags) ? password.tags : []
     })
     setEditingPassword(password)
     setShowCreateForm(true)
@@ -635,93 +575,17 @@ function Content(): React.JSX.Element {
 
   return (
     <div className="h-full min-h-0 flex" ref={containerRef}>
-      {/* Items list */}
-      <div className="bg-card border-r border-border flex flex-col min-h-0" style={{ width: listWidth }}>
-        {/* Header */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold text-foreground">{t('nav.passwords')}</h1>
-            <button 
-              className="h-9 w-9 bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center transition-colors"
-              title={t('actions.add')}
-              onClick={() => setShowCreateForm(true)}
-            >
-              <Icon name="plus" size={16} className="text-primary-foreground" />
-            </button>
-          </div>
-          
-          <div className="relative">
-            <Icon name="search" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-            <Input 
-              placeholder={t('search.placeholder') as string} 
-              value={search} 
-              onChange={(e) => dispatch(setSearchQuery(e.target.value))}
-              className="pl-10 bg-muted/50 border-0 focus:bg-background"
-            />
-          </div>
-        </div>
-
-        {/* Items list */}
-        <div className="flex-1 overflow-auto p-3">
-          <div className="space-y-1">
-            {isFetching && (
-              <div className="py-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-              </div>
-            )}
-            {!isFetching && passwords.length === 0 && (
-              <div className="py-10">
-                <div className={`text-center text-sm ${isSsoMissingOrExpired ? 'text-destructive' : 'text-muted-foreground'}`}>{isSsoMissingOrExpired ? t('team.ssoLoginCta') : t('vault.empty')}</div>
-              </div>
-            )}
-            {!isFetching && passwords.map((p) => (
-              <button 
-                key={p.id} 
-                onClick={() => dispatch(setSelectedItemId(p.id))} 
-                className={`
-                  w-full text-left p-3 rounded-lg transition-all duration-200 group
-                  ${selectedId === p.id 
-                    ? 'bg-primary/10 border border-primary/20 shadow-sm' 
-                    : 'hover:bg-muted/50 border border-transparent'
-                  }
-                `}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
-                      selectedId === p.id ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                    }`}>
-                      <Icon name="lock" size={12} className="flex-shrink-0" />
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-foreground truncate group-hover:text-foreground flex items-center gap-2">
-                      <span className="truncate">{p.title}</span>
-                      {/* OTP badge indicator if notes contain otp metadata */}
-                      {typeof p.notes === 'string' && p.notes.startsWith('otp:') && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">OTP</span>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground truncate">
-                      {p.username}
-                    </div>
-                    {p.url && (
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">
-                        {new URL(p.url).hostname}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {selectedId === p.id && (
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PasswordListPane
+        passwords={passwords}
+        isFetching={isFetching}
+        isSsoMissingOrExpired={isSsoMissingOrExpired}
+        selectedId={selectedId}
+        onSelect={(id) => { try { resetForm() } catch {}; dispatch(setSelectedItemId(id)) }}
+        search={search}
+        onSearchChange={(v) => dispatch(setSearchQuery(v))}
+        onAdd={() => setShowCreateForm(true)}
+        width={listWidth}
+      />
 
       <div
         role="separator"
@@ -730,145 +594,36 @@ function Content(): React.JSX.Element {
         className={`w-1 cursor-col-resize bg-transparent hover:bg-border active:bg-border`} 
       />
 
-      {/* Details panel */}
-      <div className="flex-1 bg-background">
+      <div className="flex-1 bg-background min-w-0">
         {showCreateForm ? (
-          <div className="h-full flex flex-col">
-            <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-foreground">
-                  {editingPassword ? t('actions.editPassword') : t('actions.addPassword')}
-                </h2>
-                <Button variant="ghost" onClick={resetForm}>
-                  <Icon name="x" size={16} />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-auto p-6">
-              <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-medium text-foreground">{t('fields.title')}</label>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={scanCopied}
-                        onClick={async () => {
+          <PasswordForm
+            isSubmitting={isSubmitting}
+            editingPassword={editingPassword}
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+            scanCopied={scanCopied}
+            onScanQr={async () => {
                           try {
                             const dataUrl: string | null = await (window as any).cloudpass.cropScreen()
                             if (!dataUrl) return
                             await decodeFromDataUrl(dataUrl)
                           } catch {}
                         }}
-                        title={scanCopied ? (t('actions.copied') as string) : (t('actions.scanQr') as string)}
-                      >
-                        {scanCopied ? t('actions.copied') : t('actions.scanQr')}
-                      </Button>
-                    </div>
-                    <Input
-                      value={formData.title}
-                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder={t('fields.title') as string}
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.username')}</label>
-                    <Input
-                      value={formData.username}
-                      onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
-                      placeholder={t('fields.username') as string}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.password')}</label>
-                    <div className="flex gap-2 items-center">
-                      <Input
-                        value={otpActive ? currentOtpCode : formData.password}
-                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder={t('fields.password') as string}
-                        type={showPassword ? 'text' : 'password'}
-                        className="flex-1"
-                      />
-                      {otpActive && (
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {t('otp.refreshIn', { seconds: otpSecondsLeft })}
-                        </span>
-                      )}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setShowPassword(v => !v)}
-                        title={showPassword ? 'Hide' : 'View'}
-                      >
-                        {showPassword ? (
-                          <Icon name="eye-off" size={16} />
-                        ) : (
-                          <Icon name="eye" size={16} />
-                        )}
-                      </Button>
-                      <Button 
-                        type="button" 
-                        variant="secondary" 
-                        onClick={() => {
-                          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
-                          const password = Array.from({length: 16}, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-                          setFormData(prev => ({ ...prev, password }))
-                        }}
-                        title={t('actions.generatePassword')}
-                      >
-                        <Icon name="rotate-ccw" size={16} />        
-                      </Button>
-                      {/* Scan QR moved near Title */}
-                    </div>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.url')}</label>
-                    <Input
-                      value={formData.url}
-                      onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
-                      placeholder="https://example.com"
-                      type="url"
-                    />
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.notes')}</label>
-                    <textarea
-                      value={formData.notes}
-                      onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                      placeholder={t('fields.notes') as string}
-                      className="w-full min-h-[100px] px-3 py-2 bg-background border border-input rounded-lg text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-transparent transition-all duration-200 resize-vertical"
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex gap-3 pt-6">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        {editingPassword ? t('actions.update') : t('actions.create')}
-                      </span>
-                    ) : (
-                      editingPassword ? t('actions.update') : t('actions.create')
-                    )}
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={resetForm} disabled={isSubmitting}>
-                    {t('actions.cancel')}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
+            otpActive={otpActive}
+            currentOtpCode={currentOtpCode}
+            otpSecondsLeft={otpSecondsLeft}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+          />
         ) : selectedId ? (
           (() => {
-            const p = passwords.find(x => x.id === selectedId)
+            const base = passwords.find(x => x.id === selectedId)
+            const p = base ? ({
+              ...base,
+              ...(resolvedItem || {}),
+            } as VaultItem) : null
             if (!p) return (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
@@ -877,103 +632,14 @@ function Content(): React.JSX.Element {
               </div>
             )
             const otpMeta = selectedOtpMeta
-
-            return (
-              <div className="h-full flex flex-col">
-                {/* Header */}
-                <div className="p-6 border-b border-border">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-                      <Icon name="lock" size={12} className="flex-shrink-0" />
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                          <span className="truncate">{p.title}</span>
-                          {otpMeta && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">OTP</span>
-                          )}
-                        </h2>
-                        <div className="text-sm text-muted-foreground">{p.username}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Button variant="secondary" onClick={() => startEdit(p)}>
-                        {t('actions.edit')}
-                      </Button>
-                      <Button 
-                        variant="destructive"
-                        onClick={() => handleDeleteClick(p)}
-                      >
-                        {t('actions.delete')}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {p.tags && p.tags.length > 0 && (
-                    <div className="flex items-center gap-2 mt-4">
-                      {p.tags.map(tag => (
-                        <span key={tag} className="px-2 py-1 bg-muted rounded-md text-xs font-medium text-muted-foreground">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Content (read-only form layout) */}
-                <div className="flex-1 overflow-auto p-6">
-                  <div className="max-w-2xl space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
-                      <div className="h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm">{p.title}</div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">{t('fields.username')}</label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm">{p.username || ''}</div>
-                        <button 
-                          className="h-10 px-3 bg-muted hover:bg-muted/80 rounded-lg text-sm"
-                          onClick={() => copyWithFeedback(p.username ?? '', t('clipboard.usernameCopied'), showToast)}
-                          title={t('actions.copy')}
-                        >
-                          {t('actions.copy')}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">{t('fields.password')}</label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
-                          {selectedOtpMeta ? (
-                            <span className="flex items-center gap-2">
-                              <span>{showPassword ? detailOtpCode : '••••••'}</span>
-                              <span className="text-xs text-muted-foreground">{t('otp.refreshIn', { seconds: detailOtpSecondsLeft })}</span>
-                            </span>
-                          ) : (p.password && p.password.toLowerCase().startsWith('otpauth://') ? '••••••••' : showPassword ? p.password : '•'.repeat(12))}
-                        </div>
-                        <button 
-                          className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground"
-                          onClick={() => setShowPassword(!showPassword)}
-                                              >
-                        {showPassword ? (
-                          <Icon name="eye-off" size={16} />
-                        ) : (
-                          <Icon name="eye" size={16} />
-                        )}
-                      </button>
-                        <button 
-                          className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground"
-                          onClick={async () => {
-                            // If this is an OTP item, copy the current live code
+            const handleCopy = async (): Promise<void> => {
+              try {
                             if (typeof p.notes === 'string' && p.notes.startsWith('otp:')) {
                               const code = detailOtpCode || ''
                               await copyWithFeedback(code, t('clipboard.passwordCopied'), showToast)
                               return
                             }
                             if (!p.ssmArn) {
-                              // If password stores otpauth URL, copy live token instead
                               if (p.password && p.password.toLowerCase().startsWith('otpauth://')) {
                                 await copyWithFeedback(detailOtpCode || '', t('clipboard.passwordCopied'), showToast)
                                 return
@@ -981,10 +647,8 @@ function Content(): React.JSX.Element {
                               await copyWithFeedback(p.password ?? '', t('clipboard.passwordCopied'), showToast)
                               return
                             }
-                            try {
-                              const { resolveVaultContext } = await import('../services/vaultPaths')
                               const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-                              const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, p.ssmArn, awsProfile || profile)
+                const secret = await (window as any).cloudpass.teamGetSecretValue(awsRegion || region, p.ssmArn, awsProfile || profile)
                               if (secret) {
                                 const decrypted = decryptJson<VaultItem>(secret, key ?? '')
                                 const value = decrypted.password || ''
@@ -997,37 +661,19 @@ function Content(): React.JSX.Element {
                             } catch {
                               await copyWithFeedback(p.password ?? '', t('clipboard.passwordCopied'), showToast)
                             }
-                          }}
-                          title={t('actions.copy')}
-                        >
-                        <Icon name="copy" size={16} />
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">{t('fields.url')}</label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm truncate">{p.url || ''}</div>
-                        {!!p.url && (
-                          <button 
-                            className="h-10 px-3 bg-muted hover:bg-muted/80 rounded-lg text-sm"
-                            onClick={() => window.open(p.url!, '_blank')}
-                            title={t('actions.open') as string}
-                          >
-                            {t('actions.open')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {p.notes && !(typeof p.notes === 'string' && p.notes.startsWith('otp:')) && (
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">{t('fields.notes')}</label>
-                        <div className="w-full px-3 py-2 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap leading-relaxed">{p.notes}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+            }
+            return (
+              <PasswordDetails
+                item={p}
+                otpMeta={otpMeta}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                detailOtpCode={detailOtpCode}
+                detailOtpSecondsLeft={detailOtpSecondsLeft}
+                onEdit={startEdit}
+                onDelete={handleDeleteClick}
+                onCopyPassword={handleCopy}
+              />
             )
           })()
         ) : (
@@ -1047,7 +693,7 @@ function Content(): React.JSX.Element {
 
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({isOpen: false, item: null})}
+        onClose={() => setDeleteConfirm({ isOpen: false, item: null })}
         onConfirm={handleDeleteConfirm}
         title={t('actions.confirmDelete')}
         message={t('actions.deleteMessage', { name: deleteConfirm.item?.title })}
@@ -1115,7 +761,7 @@ function Content(): React.JSX.Element {
   )
 }
 
-export default function Passwords(): React.JSX.Element {
+export function Passwords(): React.JSX.Element {
   return (
     <MasterGate>
       <Content />

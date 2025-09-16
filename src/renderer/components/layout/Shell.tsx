@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { TopBar } from './TopBar'
@@ -15,6 +15,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   const sidebarCollapsed = useSelector((s: RootState) => s.ui.sidebarCollapsed)
   const selectedVaultId = useSelector((s: RootState) => s.ui.selectedVaultId)
   const { showToast } = useSafeToast()
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
 
   // Global AWS identity/SSO error notifications
   useEffect(() => {
@@ -45,7 +46,9 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr] bg-background">
-      <TopBar />
+      <div className="sticky top-0 z-50">
+        <TopBar />
+      </div>
       <div className={`grid min-h-0 overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'grid-cols-[56px_1fr]' : 'grid-cols-[280px_1fr]'}`}>
         <aside className={`bg-sidebar border-r border-sidebar-border flex flex-col min-h-0 transition-all duration-300 ${sidebarCollapsed ? 'overflow-hidden' : ''} shadow-sm`}>
           {/* Header with logo and toggle */}
@@ -88,7 +91,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                     {t('vault.vaults')}
                   </span>
                 </div>
-                <VaultsList />
+                <VaultsList storageMode={storageMode} />
               </div>
             )}
 
@@ -182,35 +185,23 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   )
 }
 
-function VaultsList(): React.JSX.Element {
+function VaultsList({ storageMode }: { storageMode?: 'cloud' | 'local' }): React.JSX.Element {
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const selected = useSelector((s: RootState) => s.ui.selectedVaultId)
-  // No auth guard for department label; read-only config
-  const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
-  const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
-  const [departmentLabel, setDepartmentLabel] = useState<string>('')
   const navigate = useNavigate()
 
-  const baseItems = useMemo(() => ([
-    { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
-    { id: 'work', name: (departmentLabel && departmentLabel.trim().length > 0) ? departmentLabel : (t('vault.work') as string), icon: 'briefcase', color: 'bg-purple-500' },
-  ]), [t, departmentLabel])
-
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const cfg = await (window as any).cloudpass?.configGet?.()
-        const dep = (cfg?.department || localStorage.getItem('department') || '') as string
-        setDepartmentLabel(dep)
-      } catch {
-        try {
-          const dep = localStorage.getItem('department') || ''
-          setDepartmentLabel(dep)
-        } catch {}
-      }
-    })()
-  }, [awsRegion, awsAccountId])
+  const baseItems = useMemo(() => {
+    const items: Array<{ id: string; name: string; icon: string; color: string }> = [
+      { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
+    ]
+    if (storageMode === 'cloud') {
+      const department = (typeof localStorage !== 'undefined' && (localStorage.getItem('department') || '')) as string
+      const workName = (department && department.trim().length > 0) ? department : (t('vault.work') as string)
+      items.push({ id: 'work', name: workName, icon: 'briefcase', color: 'bg-purple-500' })
+    }
+    return items as any[]
+  }, [t, storageMode])
 
 
   return (

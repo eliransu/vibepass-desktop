@@ -23,7 +23,8 @@ function Content(): React.JSX.Element {
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
-  const isSsoMissingOrExpired = !awsAccountId
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  const isSsoMissingOrExpired = storageMode === 'cloud' && !awsAccountId
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -102,6 +103,18 @@ function Content(): React.JSX.Element {
     setEditingNote(null)
   }
 
+  // Reset local UI state when storage mode changes
+  useEffect(() => {
+    try {
+      setShowCreateForm(false)
+      setEditingNote(null)
+      setFormData({ title: '', content: '' })
+      setPreview(false)
+      dispatch(setSelectedItemId(null))
+      dispatch(setSearchQuery(''))
+    } catch {}
+  }, [storageMode, dispatch])
+
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     if (!uid || !key || !formData.title) return
@@ -150,7 +163,7 @@ function Content(): React.JSX.Element {
       <div className="bg-card border-r border-border flex flex-col min-h-0" style={{ width: listWidth }}>
         {/* Header */}
         <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h1 className="text-xl font-semibold text-foreground">{t('nav.notes')}</h1>
             <button 
               className="h-9 w-9 bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center transition-colors"
@@ -188,7 +201,7 @@ function Content(): React.JSX.Element {
             {!isFetching && notes.map((note) => (
               <button 
                 key={note.id} 
-                onClick={() => dispatch(setSelectedItemId(note.id))} 
+                onClick={() => { try { setShowCreateForm(false); setEditingNote(null); setFormData({ title: '', content: '' }); setPreview(false) } catch {}; dispatch(setSelectedItemId(note.id)) }} 
                 className={`
                   w-full text-left p-3 rounded-lg transition-all duration-200 group
                   ${selectedId === note.id 
@@ -235,11 +248,11 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background">
+      <div className="flex-1 bg-background min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-xl font-semibold text-foreground">
                   {editingNote ? t('actions.editNote') : t('actions.addNote')}
                 </h2>
@@ -252,7 +265,7 @@ function Content(): React.JSX.Element {
             <div className="flex-1 overflow-auto p-6">
               <form onSubmit={handleSubmit} className="h-full flex flex-col max-w-2xl space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')} <span className="text-destructive">*</span></label>
                   <Input
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
@@ -261,7 +274,7 @@ function Content(): React.JSX.Element {
                   />
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button type="button" variant={preview ? 'secondary' : 'default'} onClick={() => setPreview(false)}>{t('actions.edit')}</Button>
                   <Button type="button" variant={preview ? 'default' : 'secondary'} onClick={() => setPreview(true)}>Preview</Button>
                 </div>
@@ -286,7 +299,7 @@ function Content(): React.JSX.Element {
                   </div>
                 )}
                 
-                <div className="flex gap-3 pt-6">
+                <div className="flex flex-wrap gap-3 pt-6">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
@@ -319,8 +332,8 @@ function Content(): React.JSX.Element {
               <div className="h-full flex flex-col">
                 {/* Header */}
                 <div className="p-6 border-b border-border">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-4 min-w-0">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
                           <Icon name="file-text" size={16} className="text-primary-foreground" />
                       </div>
@@ -332,7 +345,7 @@ function Content(): React.JSX.Element {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button variant="secondary" onClick={() => startEdit(note)}>
                         {t('actions.edit')}
                       </Button>
@@ -376,12 +389,14 @@ function Content(): React.JSX.Element {
                 {/* Content */}
                 <div className="flex-1 overflow-auto p-6">
                   <div className="max-w-4xl">
-                    <div className="w-full p-4 bg-muted/50 rounded-lg text-sm leading-relaxed border border-border">
-                      <div
-                        className="prose prose-invert max-w-none"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(note.notes || '') as string) }}
-                      />
-                    </div>
+                    {note.notes && (
+                      <div className="w-full p-4 bg-muted/50 rounded-lg text-sm leading-relaxed border border-border">
+                        <div
+                          className="prose prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(note.notes || '') as string) }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../shared/store'
 import { useListQuery, useCreateMutation, useRemoveMutation, useUpdateMutation, type VaultItem } from '../services/vaultApi'
 import { MasterGate } from '../features/security/MasterGate'
+import { resolveVaultContext } from '../services/vaultPaths'
 import { useTranslation } from 'react-i18next'
 import { decryptJson } from '../../shared/security/crypto'
 import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/ui/uiSlice'
@@ -27,8 +28,9 @@ function Content(): React.JSX.Element {
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
-  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
-  const isSsoMissingOrExpired = !awsAccountId
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key, refetchOnMountOrArgChange: true, refetchOnFocus: true, refetchOnReconnect: true })
+  const isSsoMissingOrExpired = storageMode === 'cloud' && !awsAccountId
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -49,6 +51,52 @@ function Content(): React.JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSecret, _setShowSecret] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Resolve freshest value from remote when in cloud mode
+  const [resolvedItem, setResolvedItem] = useState<VaultItem | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadRemote(): Promise<void> {
+      try {
+        if (!selectedId) { setResolvedItem(null); return }
+        const base = (data ?? []).find(x => x.id === selectedId) || null
+        if (!base || storageMode !== 'cloud' || !base.ssmArn || !uid || !key) {
+          setResolvedItem(null)
+          return
+        }
+        const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
+        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, base.ssmArn, awsProfile || profile)
+        if (cancelled) return
+        if (secret) {
+          try {
+            const decrypted = decryptJson<VaultItem>(secret, key)
+            setResolvedItem({ ...decrypted, id: base.id, ssmArn: base.ssmArn })
+          } catch {
+            setResolvedItem(null)
+          }
+        } else {
+          setResolvedItem(null)
+        }
+      } catch {
+        setResolvedItem(null)
+      }
+    }
+    void loadRemote()
+    return () => { cancelled = true }
+  }, [selectedId, storageMode, uid, key, selectedVaultId, email, awsRegion, awsProfile, data])
+
+  // Reset local UI state when storage mode changes
+  useEffect(() => {
+    try {
+      setShowCreateForm(false)
+      setEditingItem(null)
+      setResolvedItem(null)
+      setFormData({ title: '', secret: '', details: '' })
+      dispatch(setSelectedItemId(null))
+      dispatch(setSearchQuery(''))
+    } catch {}
+  }, [storageMode, dispatch])
 
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
@@ -191,7 +239,7 @@ function Content(): React.JSX.Element {
       <div className="bg-card border-r border-border flex flex-col min-h-0" style={{ width: listWidth }}>
         {/* Header */}
         <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h1 className="text-xl font-semibold text-foreground">{t('nav.apiKeys')}</h1>
             <button 
               className="h-9 w-9 bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center transition-colors"
@@ -229,7 +277,7 @@ function Content(): React.JSX.Element {
             {!isFetching && items.map((it) => (
               <button 
                 key={it.id} 
-                onClick={() => dispatch(setSelectedItemId(it.id))} 
+                onClick={() => { try { setShowCreateForm(false); setEditingItem(null); setFormData({ title: '', secret: '', details: '' }) } catch {}; dispatch(setSelectedItemId(it.id)) }} 
                 className={`
                   w-full text-left p-3 rounded-lg transition-all duration-200 group
                   ${selectedId === it.id 
@@ -274,11 +322,11 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background">
+      <div className="flex-1 bg-background min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-xl font-semibold text-foreground">
                   {editingItem ? t('actions.editApiKey') : t('actions.addApiKey')}
                 </h2>
@@ -292,7 +340,7 @@ function Content(): React.JSX.Element {
               <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
+                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')} <span className="text-destructive">*</span></label>
                     <Input
                       value={formData.title}
                       onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
@@ -303,12 +351,23 @@ function Content(): React.JSX.Element {
                   
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-foreground mb-2">{t('fields.secret')}</label>
-                    <Input
-                      value={formData.secret}
-                      onChange={(e) => setFormData(prev => ({ ...prev, secret: e.target.value }))}
-                      placeholder={t('fields.secret') as string}
-                      type={showSecret ? 'text' : 'password'}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={formData.secret}
+                        onChange={(e) => setFormData(prev => ({ ...prev, secret: e.target.value }))}
+                        placeholder={t('fields.secret') as string}
+                        type={showSecret ? 'text' : 'password'}
+                        className="flex-1 min-w-0"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="flex-shrink-0 whitespace-nowrap"
+                        onClick={() => _setShowSecret(v => !v)}
+                      >
+                        <Icon name={showSecret ? 'eye-off' : 'eye'} size={16} />
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="md:col-span-2">
@@ -322,7 +381,7 @@ function Content(): React.JSX.Element {
                   </div>
                 </div>
                 
-                <div className="flex gap-3 pt-6">
+                <div className="flex flex-wrap gap-3 pt-6">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
@@ -342,7 +401,7 @@ function Content(): React.JSX.Element {
           </div>
         ) : selectedId ? (
           (() => {
-            const it = items.find(x => x.id === selectedId)
+            const it = (resolvedItem ?? items.find(x => x.id === selectedId))
             if (!it) return (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
@@ -355,8 +414,8 @@ function Content(): React.JSX.Element {
               <div className="h-full flex flex-col">
                 {/* Header */}
                 <div className="p-6 border-b border-border">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-4 min-w-0">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
                         <Icon name="key" size={10} className="text-primary-foreground" />
                       </div>
@@ -365,7 +424,7 @@ function Content(): React.JSX.Element {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button variant="secondary" onClick={() => startEdit(it)}>
                         {t('actions.edit')}
                       </Button>
@@ -387,35 +446,38 @@ function Content(): React.JSX.Element {
                       <div className="h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm">{it.title}</div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">{t('fields.secret')}</label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center font-mono text-sm">{'•'.repeat(12)}</div>
-                        <button 
-                          className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground"
-                          onClick={async () => {
-                            if (!it.ssmArn) {
-                              await copyWithFeedback(it.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
-                              return
-                            }
-                            try {
-                              const { resolveVaultContext } = await import('../services/vaultPaths')
-                              const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-                              const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, it.ssmArn, awsProfile || profile)
-                              if (secret) {
-                                const decrypted = decryptJson<VaultItem>(secret, key ?? '')
-                                await copyWithFeedback(decrypted.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
+                    {(it.password || it.ssmArn) && (
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">{t('fields.secret')}</label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center font-mono text-sm min-w-0">{'•'.repeat(12)}</div>
+                          <button 
+                            className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground flex-shrink-0 whitespace-nowrap"
+                            onClick={async () => {
+                              if (!it.ssmArn || resolvedItem) {
+                                const value = (resolvedItem?.password ?? it.password) ?? ''
+                                await copyWithFeedback(value, t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
+                                return
                               }
-                            } catch {
-                              await copyWithFeedback(it.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
-                            }
-                          }}
-                          title={t('actions.copy')}
-                        >
-                          {t('actions.copy')}
-                        </button>
+                              try {
+                                const { resolveVaultContext } = await import('../services/vaultPaths')
+                                const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
+                                const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, it.ssmArn, awsProfile || profile)
+                                if (secret) {
+                                  const decrypted = decryptJson<VaultItem>(secret, key ?? '')
+                                  await copyWithFeedback(decrypted.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
+                                }
+                              } catch {
+                                await copyWithFeedback(it.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
+                              }
+                            }}
+                            title={t('actions.copy')}
+                          >
+                            {t('actions.copy')}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {it.notes && (
                       <div>

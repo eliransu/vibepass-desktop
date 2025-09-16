@@ -29,8 +29,8 @@ export function resolveVaultContext(params: { uid: string; selectedVaultId: stri
   }
 
   if (selectedVaultId === 'work') {
-    // Shared/department at tenant level: {tenant}/shared/department
-    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'
+    // Shared department vault: {tenant}/{account}/{region}/shared/{department}
+    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'department'
     return { collectionPath: `${tenant}/${accountId}/${savedRegion}/shared/${department}`, region: savedRegion as string, profile: savedProfile || undefined }
   }
 
@@ -47,7 +47,8 @@ export function getVaultSecretName(params: { uid: string; selectedVaultId: strin
   }
   const region = ''
   if (selectedVaultId === 'work') {
-    return `cloudpass/${tenant}/${accountId}/${region}/department/vault`
+    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'department'
+    return `cloudpass/${tenant}/${accountId}/${region}/${department}/vault`
   }
   if (selectedVaultId === 'personal') {
     return `cloudpass/${tenant}/${accountId}/${region}/${uid}/${selectedVaultId}/vault`
@@ -65,7 +66,7 @@ export function getVaultSecretNameWithOverrides(params: { uid: string; selectedV
   }
   const region = regionOverride || ''
   if (selectedVaultId === 'work') {
-    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'
+    const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'department'
     return `cloudpass/${tenant}/${accountId}/${region}/${department}/vault`
   }
   if (selectedVaultId === 'personal') {

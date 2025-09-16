@@ -26,6 +26,21 @@ export const vaultApi = createApi({
     list: build.query<VaultItem[], { uid: string; key: string; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
       async queryFn({ uid, key, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
+          const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
+          if (storageMode === 'local') {
+            const preload = (window as any).cloudpass as any
+            const localKey = `localVault:${selectedVaultId}`
+            const enc = preload ? await preload.storeGet(localKey) : undefined
+            let consolidated: Record<string, VaultItem> = {}
+            if (enc && typeof enc === 'string' && enc.length > 0) {
+              try {
+                consolidated = decryptJson<Record<string, VaultItem>>(enc, key)
+              } catch {
+                try { consolidated = JSON.parse(enc) as Record<string, VaultItem> } catch { consolidated = {} }
+              }
+            }
+            return { data: Object.values(consolidated) }
+          }
           if (!accountIdOverride || !regionOverride) {
             return { data: [] }
           }
@@ -60,62 +75,7 @@ export const vaultApi = createApi({
             
             let secret = vaultResult.data
             
-            // Try alternative method: direct secret access by ARN (if configured)
-            if (!secret && isWork) {
-              // Build ARN from configuration instead of hardcoding
-              const currentAccountId = accountIdOverride
-              const currentRegion = regionOverride || region
-              const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || 'default'
-              const department = (typeof localStorage !== 'undefined' && localStorage.getItem('department')) || 'engineering'
-              
-              if (currentAccountId && currentRegion) {
-                const arn = `arn:aws:secretsmanager:${currentRegion}:${currentAccountId}:secret:cloudpass/${tenant}/${currentAccountId}/${currentRegion}/${department}/vault-*`
-                try {
-                  secret = await preload.teamGetSecretValue(currentRegion, arn, profileOverride || profile)
-                  // Removed verbose logs
-                } catch (e: any) {
-                  // Ignore direct ARN access failures
-                }
-              } else {
-                // Missing account/region; skip
-              }
-            }
-            
-            // If still not found and this is a work vault, try alternative naming patterns
-            if (!secret && isWork) {
-              const alternativeNames = [
-                // Try without department name (old format)
-                `cloudpass/${(typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || 'default'}/${accountIdOverride}/${regionOverride}/department/vault`,
-                // Try with different department names
-                `cloudpass/${(typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || 'default'}/${accountIdOverride}/${regionOverride}/engineering/vault`,
-                // Try the pattern from your JSON (if it was stored differently)
-                name.replace('/team/', '/department/'),
-                name.replace('/team/', '/engineering/'),
-                name.replace('/applications/', '/department/')
-              ]
-              
-              for (const altName of alternativeNames) {
-                if (altName !== name) {
-                  try {
-                    const altResult = await preload.vaultRead(regionOverride || region, altName, profileOverride || profile)
-                    if (!altResult) continue
-                    if (!altResult.success) {
-                      if (altResult.error === 'AccessDeniedException') {
-                        const event = new CustomEvent('vault-access-denied', { 
-                          detail: { message: altResult.message, secretName: altName } 
-                        })
-                        window.dispatchEvent(event)
-                      }
-                      continue
-                    }
-                    secret = altResult.data
-                    if (secret) { break }
-                  } catch {
-                    // Continue trying
-                  }
-                }
-              }
-            }
+            // No department-based fallbacks; paths are fixed
             
             if (secret) {
               try {
@@ -152,6 +112,21 @@ export const vaultApi = createApi({
     create: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
       async queryFn({ uid, key, item, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
+          const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
+          if (storageMode === 'local') {
+            const preload = (window as any).cloudpass as any
+            const localKey = `localVault:${selectedVaultId}`
+            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            let parsed: Record<string, VaultItem> = {}
+            if (currentEnc) {
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+            }
+            const newId = item.id && item.id.trim().length > 0 ? item.id : uuidv4()
+            parsed[newId] = { ...item, id: newId }
+            const enc = encryptJson(parsed, key)
+            if (preload) await preload.storeSet(localKey, enc)
+            return { data: undefined }
+          }
           if (!accountIdOverride || !regionOverride) {
             throw new Error('Missing AWS context')
           }
@@ -209,6 +184,20 @@ export const vaultApi = createApi({
     update: build.mutation<void, { uid: string; key: string; item: VaultItem; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
       async queryFn({ uid, key, item, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
+          const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
+          if (storageMode === 'local') {
+            const preload = (window as any).cloudpass as any
+            const localKey = `localVault:${selectedVaultId}`
+            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            let parsed: Record<string, VaultItem> = {}
+            if (currentEnc) {
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+            }
+            parsed[item.id] = { ...parsed[item.id], ...item }
+            const enc = encryptJson(parsed, key)
+            if (preload) await preload.storeSet(localKey, enc)
+            return { data: undefined }
+          }
           if (!accountIdOverride || !regionOverride) {
             throw new Error('Missing AWS context')
           }
@@ -258,12 +247,27 @@ export const vaultApi = createApi({
           return { error: { error: e.message } as any }
         }
       },
-      invalidatesTags: (_result, _error, arg) => [{ type: 'Vault', id: arg.item.id }],
+      // Invalidate both the specific item and the LIST to ensure list query refreshes
+      invalidatesTags: (_result, _error, arg) => [{ type: 'Vault', id: arg.item.id }, { type: 'Vault', id: 'LIST' }],
     }),
     // Remove: delete from consolidated blob; remove doc
     remove: build.mutation<void, { uid: string; key: string; id: string; selectedVaultId: string; regionOverride?: string; profileOverride?: string; accountIdOverride?: string }>({
       async queryFn({ uid, key, id, selectedVaultId, regionOverride, profileOverride, accountIdOverride }) {
         try {
+          const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
+          if (storageMode === 'local') {
+            const preload = (window as any).cloudpass as any
+            const localKey = `localVault:${selectedVaultId}`
+            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            let parsed: Record<string, VaultItem> = {}
+            if (currentEnc) {
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+            }
+            delete parsed[id]
+            const enc = encryptJson(parsed, key)
+            if (preload) await preload.storeSet(localKey, enc)
+            return { data: undefined }
+          }
           if (!accountIdOverride || !regionOverride) {
             throw new Error('Missing AWS context')
           }

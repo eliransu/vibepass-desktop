@@ -1,19 +1,20 @@
 import React, { useEffect } from 'react'
 import { createHashRouter, RouterProvider, Navigate, Outlet, useNavigate, useRouteError } from 'react-router-dom'
-import { Provider, useDispatch } from 'react-redux'
-import { store } from '../shared/store'
+import { Provider, useDispatch, useSelector } from 'react-redux'
+import { store, RootState } from '../shared/store'
 import { Shell } from './components/layout/Shell'
 import { ToastProvider } from './components/ui/toast-provider'
 import { MasterGate } from './features/security/MasterGate'
 import { setUser } from './features/auth/authSlice'
 import { setSsoRequired } from './features/ui/uiSlice'
+import { ModeSelect } from './sections/ModeSelect'
 import { Icon } from './components/ui/icon'
 import { useSafeToast } from './hooks/useSafeToast'
 import { useTranslation } from 'react-i18next'
 
 // Firebase auth removed: gate app by Master password instead
 
-const Passwords = React.lazy(() => import('./sections/Passwords'))
+const Passwords = React.lazy(() => import('./sections/Passwords').then(m => ({ default: m.Passwords })))
 const ApiKeys = React.lazy(() => import('./sections/ApiKeys'))
 const Notes = React.lazy(() => import('./sections/Notes'))
 const Cards = React.lazy(() => import('./sections/Cards'))
@@ -42,17 +43,10 @@ function ErrorPage(): React.JSX.Element {
 }
 
 const router = createHashRouter([
+  { path: '/mode', element: <ModeSelect /> },
   {
     path: '/',
-    element: (
-      <MasterGate>
-        <Shell>
-          <React.Suspense fallback={null}>
-            <Outlet />
-          </React.Suspense>
-        </Shell>
-      </MasterGate>
-    ),
+    element: <RootSwitch />,
     errorElement: <ErrorPage />,
     children: [
       { index: true, element: <Navigate to="/passwords" replace /> },
@@ -67,6 +61,7 @@ const router = createHashRouter([
 export function AppRouter(): React.JSX.Element {
   function WithAuth(): React.JSX.Element {
     const dispatch = useDispatch()
+    const storageMode = useSelector((s: RootState) => s.ui.storageMode)
     React.useEffect(() => {
       // Always resolve from AWS STS; never reuse cached local user
       const preload = (window as any).cloudpass as any
@@ -80,6 +75,16 @@ export function AppRouter(): React.JSX.Element {
         }
       }
       async function resolveIdentity(): Promise<void> {
+        if (storageMode === 'local') {
+          const uid = 'local-user'
+          applyUser({ uid, email: 'local@vault', displayName: 'Local', photoURL: '' })
+          dispatch(setSsoRequired(false))
+          return
+        }
+        if (storageMode !== 'cloud') {
+          // No selection yet; do not attempt AWS
+          return
+        }
         if (!(preload && typeof preload.getAwsUserIdentity === 'function')) { applyUser(null); return }
         try {
           const res = await preload.getAwsUserIdentity() as { ok: true; userId: string } | { ok: false; error: string; code?: string }
@@ -107,7 +112,7 @@ export function AppRouter(): React.JSX.Element {
         }
       }
       void resolveIdentity()
-    }, [dispatch])
+    }, [dispatch, storageMode])
     return (
       <ToastProvider>
         <VaultErrorHandler />
@@ -119,6 +124,22 @@ export function AppRouter(): React.JSX.Element {
     <Provider store={store}>
       <WithAuth />
     </Provider>
+  )
+}
+
+function RootSwitch(): React.JSX.Element {
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  if (!storageMode) {
+    return <ModeSelect />
+  }
+  return (
+    <MasterGate>
+      <Shell>
+        <React.Suspense fallback={null}>
+          <Outlet />
+        </React.Suspense>
+      </Shell>
+    </MasterGate>
   )
 }
 

@@ -38,7 +38,9 @@ import {
   Monitor,
   Loader2,
   HelpCircle,
-  type LucideIcon
+  type LucideIcon,
+  Cloud,
+  Home
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
@@ -87,10 +89,12 @@ const iconMap = {
   'check-circle': CheckCircle,
   'alert-triangle': AlertTriangle,
   info: Info,
-  
+  cloud: Cloud,
+  local: Home,
   // File operations
   upload: Upload,
   download: Download,
+
   
   // QR/Scanning
   scan: Scan,

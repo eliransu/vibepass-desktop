@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDispatch, useSelector } from 'react-redux'
-import { RootState } from '../../../shared/store'
-import { setAwsRegion as setAwsRegionAction, setAwsAccountId } from '../../features/ui/uiSlice'
+import { RootState, store } from '../../../shared/store'
+import { setAwsRegion as setAwsRegionAction, setAwsAccountId, setStorageMode, setSelectedItemId, setSearchQuery, setSelectedVaultId } from '../../features/ui/uiSlice'
+import { vaultApi } from '../../services/vaultApi'
 import { IconButton } from '../ui/icon-button'
 import { Icon } from '../ui/icon'
 import { ConfirmDialog } from '../ui/confirm-dialog'
@@ -20,6 +21,7 @@ export function TopBar(): React.JSX.Element {
   // Keep account id in store; UI does not directly use it here
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
   const dispatch = useDispatch()
   const { showToast } = useSafeToast()
   const [showProfileError, setShowProfileError] = useState(false)
@@ -96,10 +98,7 @@ export function TopBar(): React.JSX.Element {
       return { isValid: false, error: 'Configuration must be an object' }
     }
 
-    // Department is mandatory for all configurations
-    if (!parsed.department || typeof parsed.department !== 'string') {
-      return { isValid: false, error: 'department is required' }
-    }
+    // department not required anymore
 
     // Check if it's SSO configuration (has loginUrl) or keys configuration
     const hasSSO = parsed.loginUrl || parsed.cloudAccountId || parsed.roleName
@@ -153,14 +152,13 @@ export function TopBar(): React.JSX.Element {
     
     const region = get(raw, ['region', 'ssoRegion', 'sso_region'])
     const team = get(raw, ['team'])
-    const department = get(raw, ['department'])
     
     if (hasKeys) {
       return {
         region,
         cloudAccountId: get(raw, ['cloudAccountId', 'accountId', 'ssoAccountId', 'sso_account_id']),
         team,
-        department,
+        
         accessKeyId: get(raw, ['accessKeyId', 'aws_access_key_id']),
         secretAccessKey: get(raw, ['secretAccessKey', 'aws_secret_access_key']),
         sessionToken: get(raw, ['sessionToken', 'aws_session_token']),
@@ -172,7 +170,7 @@ export function TopBar(): React.JSX.Element {
       region,
       cloudAccountId: get(raw, ['cloudAccountId', 'ssoAccountId', 'accountId', 'sso_account_id']),
       team,
-      department,
+      
       loginUrl: get(raw, ['loginUrl', 'ssoStartUrl', 'startUrl', 'sso_start_url']),
       roleName: get(raw, ['roleName', 'ssoRoleName', 'sso_role_name']),
     }
@@ -187,7 +185,6 @@ export function TopBar(): React.JSX.Element {
         cloudAccountId: '123456789012',
         roleName: 'AdministratorAccess',
         region: 'us-east-1',
-        department: 'engineering',
         team: 'backend'
       }
       setConfigText(JSON.stringify(toFill, null, 2))
@@ -197,7 +194,6 @@ export function TopBar(): React.JSX.Element {
         cloudAccountId: '123456789012',
         roleName: 'AdministratorAccess',
         region: 'us-east-1',
-        department: 'engineering',
         team: 'backend'
       }
       setConfigText(JSON.stringify(fallback, null, 2))
@@ -246,6 +242,39 @@ export function TopBar(): React.JSX.Element {
 
       {/* Right side controls */}
       <div className="flex items-center gap-3">
+        {/* Switch storage mode */}
+        <button
+          className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
+          onClick={async () => {
+            const next = storageMode === 'local' ? 'cloud' : 'local'
+            dispatch(setStorageMode(next))
+            // Clear RTK Query cache so lists/details refetch per env
+            try { store.dispatch(vaultApi.util.resetApiState()) } catch {}
+            // Explicitly reset UI to initial state (Passwords -> personal, no selection/search)
+            try {
+              dispatch(setSelectedItemId(null))
+              dispatch(setSearchQuery(''))
+              dispatch(setSelectedVaultId('personal'))
+            } catch {}
+            // When switching to local, clear cloud-specific persisted context
+            if (next === 'local') {
+              try {
+                localStorage.removeItem('awsAccountId')
+                localStorage.removeItem('awsProfile')
+                localStorage.removeItem('tenant')
+                localStorage.removeItem('department')
+              } catch {}
+              try { await (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+              try { await (window as any).cloudpass?.storeSet?.('awsProfile', '') } catch {}
+              try { dispatch(setAwsAccountId(undefined)) } catch {}
+            }
+            // Route to passwords (initial screen)
+            try { window.location.hash = '#/passwords' } catch {}
+          }}
+        >
+          {storageMode === 'local' ? t('mode.switchToCloud') : t('mode.switchToLocal')}
+        </button>
+
         {/* Language selector - commented out per request */}
         {false && (
           <div className="relative">
@@ -261,28 +290,31 @@ export function TopBar(): React.JSX.Element {
           </div>
         )}
 
-        {/* Config loader / dropdown */}
-        {config ? (
-          <div className="relative inline-flex items-center" style={{height: '44px'}}>
+        {/* Config loader / dropdown - visible only in cloud mode */}
+        {storageMode === 'cloud' && (
+          config ? (
+            <div className="relative inline-flex items-center" style={{height: '44px'}}>
+              <button
+                className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border-2 border-border rounded-lg text-sm font-medium focus:outline-none transition-colors shadow-sm hover:shadow-md`}
+                onClick={() => void openConfigModal(config)}
+                title={t('config.reload') as string}
+              >
+                {t('config.editProfile')}
+              </button>
+            </div>
+          ) : (
             <button
-              className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border-2 border-border rounded-lg text-sm font-medium focus:outline-none transition-colors shadow-sm hover:shadow-md`}
-              onClick={() => void openConfigModal(config)}
-              title={t('config.reload') as string}
+              className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
+              onClick={() => void openConfigModal(null)}
+              title={t('config.load') as string}
             >
-              {t('config.editProfile')}
+              {t('config.loadCloudpassConfig')}
             </button>
-          </div>
-        ) : (
-          <button
-            className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
-            onClick={() => void openConfigModal(null)}
-            title={t('config.load') as string}
-          >
-            {t('config.loadCloudpassConfig')}
-          </button>
+          )
         )}
 
-        {/* SSO Login */}
+        {/* SSO Login (hidden in local mode) */}
+        {storageMode === 'cloud' && (
         <button
           className={`h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] ${(!awsAccountId || ssoRequired) ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 border-destructive' : 'bg-secondary hover:bg-secondary-hover border-border'}`}
           onClick={async () => {
@@ -308,6 +340,7 @@ export function TopBar(): React.JSX.Element {
         >
           {t('team.ssoLogin')}
         </button>
+        )}
 
         {/* Theme toggle */}
         <IconButton
@@ -323,6 +356,13 @@ export function TopBar(): React.JSX.Element {
         {/* User indicator (no sign out) */}
         {user && (
           <div className="flex items-center gap-3 pl-4 border-l border-border">
+            {/* Storage mode indicator */}
+            <div className="flex items-center gap-2" title={storageMode === 'local' ? t('mode.local') : t('mode.cloud')}>
+              <div className={`w-2 h-2 rounded-full ${storageMode === 'local' ? 'bg-green-500' : 'bg-blue-500'} shadow-sm`}></div>
+              <span className="text-xs font-medium text-muted-foreground uppercase trackin    g-wide">
+                {storageMode === 'local' ? 'Local' : 'Cloud'}
+              </span>
+            </div>
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 bg-gradient-primary rounded-full flex items-center justify-center overflow-hidden shadow-sm">
                 {user.photoURL ? (

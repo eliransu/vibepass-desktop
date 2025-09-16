@@ -24,7 +24,8 @@ function Content(): React.JSX.Element {
   const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
-  const isSsoMissingOrExpired = !awsAccountId
+  const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  const isSsoMissingOrExpired = storageMode === 'cloud' && !awsAccountId
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -120,6 +121,24 @@ function Content(): React.JSX.Element {
     setShowCreateForm(false)
     setEditingCard(null)
   }
+
+  // Reset local UI state when storage mode changes
+  useEffect(() => {
+    try {
+      setShowCreateForm(false)
+      setEditingCard(null)
+      setFormData({
+        title: '',
+        cardNumber: '',
+        expiryDate: '',
+        cvv: '',
+        cardholderName: '',
+        notes: ''
+      })
+      dispatch(setSelectedItemId(null))
+      dispatch(setSearchQuery(''))
+    } catch {}
+  }, [storageMode, dispatch])
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -224,7 +243,7 @@ function Content(): React.JSX.Element {
       <div className="bg-card border-r border-border flex flex-col min-h-0" style={{ width: listWidth }}>
         {/* Header */}
         <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h1 className="text-xl font-semibold text-foreground">{t('nav.cards')}</h1>
             <button 
               className="h-9 w-9 bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center transition-colors"
@@ -270,7 +289,7 @@ function Content(): React.JSX.Element {
               return (
                 <button 
                   key={card.id} 
-                  onClick={() => dispatch(setSelectedItemId(card.id))} 
+                  onClick={() => { try { setShowCreateForm(false); setEditingCard(null); setFormData({ title: '', cardNumber: '', expiryDate: '', cvv: '', cardholderName: '', notes: '' }) } catch {}; dispatch(setSelectedItemId(card.id)) }} 
                   className={`
                     w-full text-left p-3 rounded-lg transition-all duration-200 group
                     ${selectedId === card.id 
@@ -323,11 +342,11 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background">
+      <div className="flex-1 bg-background min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-xl font-semibold text-foreground">
                   {editingCard ? t('actions.editCard') : t('actions.addCard')}
                 </h2>
@@ -341,7 +360,7 @@ function Content(): React.JSX.Element {
               <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
+                    <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')} <span className="text-destructive">*</span></label>
                     <Input
                       value={formData.title}
                       onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
@@ -391,7 +410,7 @@ function Content(): React.JSX.Element {
                   </div>
                 </div>
                 
-                <div className="flex gap-3 pt-6">
+                <div className="flex flex-wrap gap-3 pt-6">
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
@@ -431,8 +450,8 @@ function Content(): React.JSX.Element {
               <div className="h-full flex flex-col">
                 {/* Header */}
                 <div className="p-6 border-b border-border">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-4 min-w-0">
                       <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
                         <Icon name="credit-card" size={24} className="text-primary-foreground" />
                       </div>
@@ -444,7 +463,7 @@ function Content(): React.JSX.Element {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button variant="secondary" onClick={() => startEdit(card)}>
                         {t('actions.edit')}
                       </Button>
@@ -461,54 +480,53 @@ function Content(): React.JSX.Element {
                 {/* Content */}
                 <div className="flex-1 overflow-auto p-6">
                   <div className="max-w-2xl space-y-6">
-                    {/* Card Number - always show */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">{t('fields.cardNumber')}</label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-12 px-4 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
-                          {cardData.number ? (
-                            <>•••• •••• •••• {cardData.number.slice(-4)}</>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </div>
-                        <button 
-                          className={`h-12 w-12 rounded-lg flex items-center justify-center transition-colors ${cardData.number ? 'bg-primary hover:bg-primary-hover' : 'bg-muted cursor-not-allowed'}`}
-                          onClick={() => cardData.number && copyToClipboard(cardData.number)}
-                          disabled={!cardData.number}
-                          title={t('actions.copy')}
-                        >
-                          <Icon name="copy" size={16} className={`${cardData.number ? 'text-primary-foreground' : 'text-muted-foreground'}`} /> 
-                          <Icon name="copy" size={16} className={cardData.number ? 'text-primary-foreground' : 'text-muted-foreground'} />      
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Expiry and CVV */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {cardData.number && (
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground">{t('fields.expiryDate')}</label>
-                        <div className="h-12 px-4 bg-muted/50 rounded-lg flex items-center text-sm">
-                          {cardData.expiry || <span className="text-muted-foreground">—</span>}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground">{t('fields.cvv')}</label>
+                        <label className="text-sm font-medium text-foreground">{t('fields.cardNumber')}</label>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-12 px-4 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
-                            {cardData.cvv ? '•••' : <span className="text-muted-foreground">—</span>}
+                            <>•••• •••• •••• {cardData.number.slice(-4)}</>
                           </div>
                           <button 
-                            className={`h-12 w-12 rounded-lg flex items-center justify-center transition-colors ${cardData.cvv ? 'bg-muted hover:bg-muted/80' : 'bg-muted cursor-not-allowed'}`}
-                            onClick={() => cardData.cvv && copyToClipboard(cardData.cvv)}
-                            disabled={!cardData.cvv}
+                            className={`h-12 w-12 rounded-lg flex items-center justify-center transition-colors ${cardData.number ? 'bg-primary hover:bg-primary-hover' : 'bg-muted cursor-not-allowed'}`}
+                            onClick={() => cardData.number && copyToClipboard(cardData.number)}
+                            disabled={!cardData.number}
                             title={t('actions.copy')}
                           >
-                            <Icon name="copy" size={16} className={cardData.cvv ? '' : 'text-muted-foreground'} />
+                            <Icon name="copy" size={16} className={`${cardData.number ? 'text-primary-foreground' : 'text-muted-foreground'}`} /> 
                           </button>
                         </div>
                       </div>
+                    )}
+
+                    {/* Expiry and CVV */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {cardData.expiry && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground">{t('fields.expiryDate')}</label>
+                          <div className="h-12 px-4 bg-muted/50 rounded-lg flex items-center text-sm">
+                            {cardData.expiry}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {cardData.cvv && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-foreground">{t('fields.cvv')}</label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-12 px-4 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
+                              {'•••'}
+                            </div>
+                            <button 
+                              className={`h-12 w-12 rounded-lg flex items-center justify-center transition-colors ${cardData.cvv ? 'bg-muted hover:bg-muted/80' : 'bg-muted cursor-not-allowed'}`}
+                              onClick={() => copyToClipboard(cardData.cvv)}
+                              title={t('actions.copy')}
+                            >
+                              <Icon name="copy" size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Notes intentionally hidden in view mode per request */}
                     </div>
