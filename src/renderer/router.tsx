@@ -15,27 +15,28 @@ import { useTranslation } from 'react-i18next'
 // Firebase auth removed: gate app by Master password instead
 
 const Passwords = React.lazy(() => import('./sections/Passwords').then(m => ({ default: m.Passwords })))
-const ApiKeys = React.lazy(() => import('./sections/ApiKeys'))
-const Notes = React.lazy(() => import('./sections/Notes'))
-const Cards = React.lazy(() => import('./sections/Cards'))
+const ApiKeys = React.lazy(() => import('./sections/ApiKeys').then(m => ({ default: m.ApiKeys })))
+const Notes = React.lazy(() => import('./sections/Notes').then(m => ({ default: m.Notes })))
+const Cards = React.lazy(() => import('./sections/Cards').then(m => ({ default: m.Cards })))
 // Team removed: vault selection controls data paths instead
 
 function ErrorPage(): React.JSX.Element {
   const navigate = useNavigate()
   const error: any = useRouteError()
+  const { t } = useTranslation()
   return (
     <div className="h-full flex items-center justify-center p-6">
       <div className="text-center max-w-sm">
         <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
           <Icon name="alert-circle" size={32} className="text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-medium text-foreground mb-2">Unexpected error</h3>
-        <p className="text-sm text-muted-foreground mb-4 break-words">{error?.statusText || error?.message || 'Something went wrong.'}</p>
+        <h3 className="text-lg font-medium text-foreground mb-2">{t('errors.unknownError')}</h3>
+        <p className="text-sm text-muted-foreground mb-4 break-words">{error?.statusText || error?.message || ''}</p>
         <button
           className="h-8 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary-hover"
           onClick={() => navigate('/passwords', { replace: true })}
         >
-          Go to passwords
+          {t('nav.passwords')}
         </button>
       </div>
     </div>

@@ -22,7 +22,6 @@ export type PasswordFormProps = {
   setFormData: React.Dispatch<React.SetStateAction<PasswordFormData>>
   onSubmit: (e: React.FormEvent) => Promise<void>
   onCancel: () => void
-  scanCopied: boolean
   onScanQr: () => Promise<void>
   otpActive: boolean
   currentOtpCode: string
@@ -40,7 +39,6 @@ export function PasswordForm(props: PasswordFormProps): React.JSX.Element {
     setFormData,
     onSubmit,
     onCancel,
-    scanCopied,
     onScanQr,
     otpActive,
     currentOtpCode,
@@ -70,12 +68,11 @@ export function PasswordForm(props: PasswordFormProps): React.JSX.Element {
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={scanCopied}
                   onClick={onScanQr}
-                  title={scanCopied ? (t('actions.copied') as string) : (t('actions.scanQr') as string)}
+                  title={t('actions.scanQr') as string}
                   className="flex items-center gap-1"
                 >
-                  <span>{scanCopied ? t('actions.copied') : t('actions.scanQr')}</span>
+                  <span>{t('actions.scanQr')}</span>
                   <Icon name="scan" size={16} className="ml-1" />
                 </Button>
               </div>

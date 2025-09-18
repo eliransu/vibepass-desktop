@@ -7,9 +7,10 @@ type UiState = {
   sidebarCollapsed: boolean
   storageMode?: 'cloud' | 'local'
   awsRegion?: string
-  awsProfile?: string
   awsAccountId?: string
   ssoRequired: boolean
+  // Global command palette visibility
+  commandPaletteOpen?: boolean
 }
 
 const initialState: UiState = {
@@ -20,9 +21,9 @@ const initialState: UiState = {
   // Region should not be stored; it is derived from AWS config (sso_region)
   storageMode: (typeof localStorage !== 'undefined' ? (localStorage.getItem('storageMode') as 'cloud' | 'local' | null) : null) || undefined,
   awsRegion: undefined,
-  awsProfile: typeof localStorage !== 'undefined' ? localStorage.getItem('awsProfile') || undefined : undefined,
   awsAccountId: typeof localStorage !== 'undefined' ? localStorage.getItem('awsAccountId') || undefined : undefined,
   ssoRequired: false,
+  commandPaletteOpen: false,
 }
 
 const slice = createSlice({
@@ -47,9 +48,6 @@ const slice = createSlice({
     setAwsRegion(state, action: PayloadAction<string | undefined>) {
       state.awsRegion = action.payload
     },
-    setAwsProfile(state, action: PayloadAction<string | undefined>) {
-      state.awsProfile = action.payload
-    },
     setAwsAccountId(state, action: PayloadAction<string | undefined>) {
       state.awsAccountId = action.payload
     },
@@ -69,7 +67,6 @@ const slice = createSlice({
         if (nextMode === 'local') {
           state.ssoRequired = false
           state.awsRegion = undefined
-          state.awsProfile = undefined
           state.awsAccountId = undefined
         }
       }
@@ -80,10 +77,16 @@ const slice = createSlice({
         }
       } catch {}
     },
+    setCommandPaletteOpen(state, action: PayloadAction<boolean>) {
+      state.commandPaletteOpen = action.payload
+    },
+    toggleCommandPalette(state) {
+      state.commandPaletteOpen = !state.commandPaletteOpen
+    },
   },
 })
 
-export const { setSelectedItemId, setSearchQuery, setSelectedVaultId, toggleSidebar, setSidebarCollapsed, setAwsRegion, setAwsProfile, setAwsAccountId, setSsoRequired, setStorageMode } = slice.actions
+export const { setSelectedItemId, setSearchQuery, setSelectedVaultId, toggleSidebar, setSidebarCollapsed, setAwsRegion, setAwsAccountId, setSsoRequired, setStorageMode, setCommandPaletteOpen, toggleCommandPalette } = slice.actions
 export const uiReducer = slice.reducer
 
 

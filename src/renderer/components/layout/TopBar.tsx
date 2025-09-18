@@ -23,6 +23,7 @@ export function TopBar(): React.JSX.Element {
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
   const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  const selectedVaultId = useSelector((s: RootState) => s.ui.selectedVaultId)
   const dispatch = useDispatch()
   const { showToast } = useSafeToast()
   const [showProfileError, setShowProfileError] = useState(false)
@@ -30,18 +31,24 @@ export function TopBar(): React.JSX.Element {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [configText, setConfigText] = useState('')
   const [configError, setConfigError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = React.useRef<HTMLDivElement | null>(null)
   
   useEffect(() => {
     localStorage.setItem('theme', theme)
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
   
-  const currentLang = (i18n.language ?? (i18n as any).resolvedLanguage ?? 'en') as string
   useEffect(() => {
-    // Set direction by language
-    const dir = currentLang.startsWith('he') ? 'rtl' : 'ltr'
-    document.documentElement.setAttribute('dir', dir)
-  }, [currentLang])
+    const onDocClick = (e: MouseEvent) => {
+      try {
+        if (!settingsRef.current) return
+        if (!settingsRef.current.contains(e.target as Node)) setSettingsOpen(false)
+      } catch {}
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
 
   const persistFromConfig = useCallback(async (cfg: any | null) => {
     if (!cfg) return
@@ -243,6 +250,7 @@ export function TopBar(): React.JSX.Element {
 
       {/* Right side controls */}
       <div className="flex items-center gap-3">
+        {/* Direction is fixed to LTR for English-only */}
         {/* Switch storage mode */}
         <button
           className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
@@ -276,12 +284,13 @@ export function TopBar(): React.JSX.Element {
           {storageMode === 'local' ? t('mode.switchToCloud') : t('mode.switchToLocal')}
         </button>
 
+
         {/* Language selector - commented out per request */}
         {false && (
           <div className="relative">
             <select 
               className="h-8 px-2.5 bg-muted/50 border border-transparent rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring appearance-none pr-7" 
-              value={currentLang.startsWith('he') ? 'he' : 'en'} 
+              value={'en'} 
               onChange={(e) => i18n.changeLanguage(e.target.value)}
             >
               <option value="en">EN</option>
@@ -289,29 +298,6 @@ export function TopBar(): React.JSX.Element {
             </select>
             <Icon name="chevron-down" size={14} className="absolute right-1.5 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
-        )}
-
-        {/* Config loader / dropdown - visible only in cloud mode */}
-        {storageMode === 'cloud' && (
-          config ? (
-            <div className="relative inline-flex items-center" style={{height: '44px'}}>
-              <button
-                className={`h-10 px-4 bg-secondary hover:bg-secondary-hover border-2 border-border rounded-lg text-sm font-medium focus:outline-none transition-colors shadow-sm hover:shadow-md`}
-                onClick={() => void openConfigModal(config)}
-                title={t('config.reload') as string}
-              >
-                {t('config.editProfile')}
-              </button>
-            </div>
-          ) : (
-            <button
-              className="h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 border-2 shadow-sm hover:shadow-md active:scale-[0.98] bg-secondary hover:bg-secondary-hover border-border"
-              onClick={() => void openConfigModal(null)}
-              title={t('config.load') as string}
-            >
-              {t('config.loadCloudpassConfig')}
-            </button>
-          )
         )}
 
         {/* SSO Login (hidden in local mode) */}
@@ -368,6 +354,78 @@ export function TopBar(): React.JSX.Element {
           className="bg-secondary hover:bg-secondary-hover border-2 border-border shadow-sm hover:shadow-md"
           iconSize={16}
         />
+
+        {/* Settings dropdown */}
+        <div className="relative" ref={settingsRef}>
+          <IconButton
+            icon="settings"
+            iconSize={16}
+            label={t('config.title') as string}
+            size="icon-sm"
+            variant="ghost"
+            className="bg-secondary hover:bg-secondary-hover border-2 border-border shadow-sm hover:shadow-md"
+            onClick={() => setSettingsOpen(o => !o)}
+          />
+          {settingsOpen && (
+            <div className="absolute right-0 mt-2 w-56 bg-card border-2 border-border rounded-xl shadow-xl overflow-hidden z-50">
+              <div className="py-1">
+                {storageMode === 'cloud' && (
+                  <button
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted/60 flex items-center gap-2"
+                    onClick={() => { setSettingsOpen(false); void openConfigModal(config ?? null) }}
+                  >
+                    <Icon name="edit" size={14} /> {config ? t('config.editProfile') : t('config.loadCloudpassConfig')}
+                  </button>
+                )}
+                {storageMode === 'local' && (
+                  <>
+                    <button
+                      className="w-full px-3 py-2 text-sm text-left hover:bg-muted/60 flex items-center gap-2"
+                      onClick={async () => {
+                        try {
+                          const localKey = `localVault:${selectedVaultId}`
+                          const enc = await window.cloudpass.storeGet<string | undefined>(localKey)
+                          const content = typeof enc === 'string' ? enc : ''
+                          const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `cloudpass-local-${selectedVaultId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+                          document.body.appendChild(a)
+                          a.click()
+                          setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 0)
+                          setSettingsOpen(false)
+                        } catch {
+                          try { showToast('Failed to dump local vault', 'error') } catch {}
+                        }
+                      }}
+                    >
+                      <Icon name="download" size={14} /> Dump local vault
+                    </button>
+                    <button
+                      className="w-full px-3 py-2 text-sm text-left hover:bg-muted/60 flex items-center gap-2"
+                      onClick={async () => {
+                        try {
+                          const f = await window.cloudpass.fileOpenJson()
+                          if (!f?.content) return
+                          const localKey = `localVault:${selectedVaultId}`
+                          await window.cloudpass.storeSet(localKey, String(f.content))
+                          try { store.dispatch(vaultApi.util.resetApiState()) } catch {}
+                          try { showToast('Local vault restored', 'success') } catch {}
+                          setSettingsOpen(false)
+                        } catch {
+                          try { showToast('Failed to restore local vault', 'error') } catch {}
+                        }
+                      }}
+                    >
+                      <Icon name="upload" size={14} /> Restore local vault
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* User indicator (no sign out) */}
         {user && (

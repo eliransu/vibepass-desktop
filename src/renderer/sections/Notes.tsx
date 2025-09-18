@@ -1,16 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../shared/store'
 import { useListQuery, useCreateMutation, useRemoveMutation, useUpdateMutation, type VaultItem } from '../services/vaultApi'
 import { MasterGate } from '../features/security/MasterGate'
 import { useTranslation } from 'react-i18next'
 import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/ui/uiSlice'
+import { resolveVaultContext, getVaultSecretNameWithOverrides } from '../services/vaultPaths'
+import { decryptJson } from '../../shared/security/crypto'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { marked } from 'marked'
 import { Icon } from '../components/ui/icon'
 import DOMPurify from 'dompurify'
 function Content(): React.JSX.Element {
+  const location = useLocation() as any
+  const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const user = useSelector((s: RootState) => s.auth.user)
@@ -20,11 +25,12 @@ function Content(): React.JSX.Element {
   const search = useSelector((s: RootState) => s.ui.searchQuery)
   const uid = user?.uid ?? ''
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
-  const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
+  const awsProfile = undefined
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key })
   const storageMode = useSelector((s: RootState) => s.ui.storageMode)
-  const isSsoMissingOrExpired = storageMode === 'cloud' && !awsAccountId
+  const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
+  const isSsoMissingOrExpired = storageMode === 'cloud' && (!!ssoRequired || !awsAccountId)
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -43,6 +49,7 @@ function Content(): React.JSX.Element {
     content: ''
   })
   const [preview, setPreview] = useState(false)
+  const [_resolvedItem, setResolvedItem] = useState<VaultItem | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [listWidth, setListWidth] = useState<number>(() => {
     const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('listPaneWidth')) || ''
@@ -103,6 +110,41 @@ function Content(): React.JSX.Element {
     setEditingNote(null)
   }
 
+  // Fallback: direct read from consolidated vault in cloud mode to resolve selected note
+  useEffect(() => {
+    let cancelled = false
+    async function loadDirectFromVault(): Promise<void> {
+      try {
+        if (!selectedId || storageMode !== 'cloud' || !uid || !key) return
+        if (!awsRegion || !awsAccountId) return
+        if (notes.find(x => x.id === selectedId)) return
+        const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
+        const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
+        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        if (cancelled) return
+        if (!res || res.success !== true) return
+        const secret = res.data
+        let parsed: Record<string, VaultItem> = {}
+        try {
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+        } catch {
+          try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
+        }
+        const found = parsed[selectedId]
+        if (found) setResolvedItem({ ...found })
+      } catch {}
+    }
+    void loadDirectFromVault()
+    return () => { cancelled = true }
+  }, [selectedId, storageMode, uid, key, selectedVaultId, user?.email, awsRegion, awsAccountId, notes])
+
+  // Ensure selection is set from route preloaded item immediately upon navigation
+  useEffect(() => {
+    if (routePreloaded && routePreloaded.id && selectedId !== routePreloaded.id) {
+      try { dispatch(setSelectedItemId(routePreloaded.id)) } catch {}
+    }
+  }, [routePreloaded?.id, selectedId, dispatch])
+
   // Reset local UI state when storage mode changes
   useEffect(() => {
     try {
@@ -114,6 +156,16 @@ function Content(): React.JSX.Element {
       dispatch(setSearchQuery(''))
     } catch {}
   }, [storageMode, dispatch])
+
+  // When selection changes via command palette, mimic list item click side-effects
+  useEffect(() => {
+    if (!selectedId) return
+    try {
+      setShowCreateForm(false)
+      setEditingNote(null)
+      setPreview(false)
+    } catch {}
+  }, [selectedId])
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -319,7 +371,7 @@ function Content(): React.JSX.Element {
           </div>
         ) : selectedId ? (
           (() => {
-            const note = notes.find(x => x.id === selectedId)
+            const note = (routePreloaded && routePreloaded.id === selectedId) ? routePreloaded : notes.find(x => x.id === selectedId)
             if (!note) return (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
@@ -412,6 +464,10 @@ function Content(): React.JSX.Element {
               <p className="text-sm text-muted-foreground max-w-sm">
                 {t('vault.selectDescription')}
               </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">{navigator.platform.toUpperCase().includes('MAC') ? '⌘' : 'Ctrl'}</kbd>
+                +<kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">K</kbd> to search any item by name or #tag.
+              </div>
             </div>
           </div>
         )}
@@ -420,7 +476,7 @@ function Content(): React.JSX.Element {
   )
 }
 
-export default function Notes(): React.JSX.Element {
+export function Notes(): React.JSX.Element {
   return (
     <MasterGate>
       <Content />

@@ -1,7 +1,7 @@
-import { app, BrowserWindow, shell, Menu, ipcMain, systemPreferences, clipboard as mainClipboard, dialog, desktopCapturer, screen } from 'electron'
+import { app, BrowserWindow, shell, Menu, ipcMain, systemPreferences, clipboard as mainClipboard, dialog } from 'electron'
 import keytar from 'keytar'
 import Store from 'electron-store'
-import { createSecretsClient, getSecret, createSecret, putSecret, deleteSecret, listAppSecrets, type CloudPassConfig } from '../shared/aws/secretsManager'
+import { createSecretsClient, getSecret, createSecret, putSecret, type CloudPassConfig } from '../shared/aws/secretsManager'
 import path from 'node:path'
 import http from 'node:http'
 import { URL } from 'node:url'
@@ -14,7 +14,7 @@ import { SSOClient, GetRoleCredentialsCommand } from '@aws-sdk/client-sso'
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts'
 
 let mainWindow: BrowserWindow | null = null
-let overlayWindow: BrowserWindow | null = null
+// Overlay window support removed
 const store = new Store<{ [key: string]: unknown }>({ name: 'cloudpass' })
 // Removed blur-based auto-lock; we only lock on hide now
 
@@ -219,69 +219,7 @@ ipcMain.handle('config:set', async (_evt, cfg: CloudPassConfig | null) => {
   return true
 })
 
-// AWS Secrets Manager via IPC - renderer sends already encrypted strings
-ipcMain.handle('team:list', async (_evt, region: string, ids: string[], _profile?: string) => {
-  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
-  const now = Date.now()
-  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
-  const client = createSecretsClient(region, effectiveAuth)
-  const results: Record<string, string | null> = {}
-  for (const id of ids) {
-    try {
-      results[id] = (await getSecret(client, id)) ?? null
-    } catch {
-      results[id] = null
-    }
-  }
-  return results
-})
-
-ipcMain.handle('team:create', async (_evt, region: string, name: string, secretString: string, _profile?: string) => {
-  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
-  const now = Date.now()
-  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
-  const client = createSecretsClient(region, effectiveAuth)
-  const team = cfg?.team
-  const department = cfg?.department
-  return createSecret(client, name, secretString, { team, department })
-})
-
-ipcMain.handle('team:update', async (_evt, region: string, id: string, secretString: string, _profile?: string) => {
-  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
-  const now = Date.now()
-  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
-  const client = createSecretsClient(region, effectiveAuth)
-  await putSecret(client, id, secretString)
-  return true
-})
-
-ipcMain.handle('team:delete', async (_evt, region: string, id: string, force: boolean, _profile?: string) => {
-  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
-  const now = Date.now()
-  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
-  const client = createSecretsClient(region, effectiveAuth)
-  await deleteSecret(client, id, force)
-  return true
-})
-
-// List cloudpass-tagged secrets
-ipcMain.handle('team:list-app', async (_evt, region: string, _profile?: string) => {
-  const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
-  const now = Date.now()
-  const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
-  const client = createSecretsClient(region, effectiveAuth)
-  return listAppSecrets(client)
-})
+// AWS Secrets Manager via IPC - keep only endpoints used by renderer
 
 // Get a secret value by ARN/id
 ipcMain.handle('team:get-secret-value', async (_evt, region: string, secretId: string, _profile?: string) => {
@@ -494,24 +432,6 @@ ipcMain.handle('clipboard:write', async (_evt, text: string) => {
   }
 })
 
-// Screen capture -> returns data URL of primary display image (user picks source if multiple)
-ipcMain.handle('screen:capture', async () => {
-  try {
-    const primary = screen.getPrimaryDisplay()
-    const scale = primary.scaleFactor || 1
-    const size = { width: Math.max(800, Math.floor(primary.size.width * scale)), height: Math.max(600, Math.floor(primary.size.height * scale)) }
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size as any })
-    if (!sources || sources.length === 0) return null
-    // Prefer primary display if labeled as such; else first
-    const source = sources.find(s => /primary|main/i.test(s.name)) || sources[0]
-    const img = source.thumbnail
-    const dataUrl = img?.toDataURL() || null
-    return dataUrl
-  } catch {
-    return null
-  }
-})
-
 // macOS native interactive crop using screencapture
 ipcMain.handle('screen:crop', async () => {
   try {
@@ -537,83 +457,6 @@ ipcMain.handle('screen:crop', async () => {
   }
 })
 
-// Simple transparent overlay to let user draw a rectangle and extract image crop -> QR decode in renderer
-ipcMain.handle('overlay:open', async () => {
-  try {
-    if (overlayWindow) { overlayWindow.focus(); return }
-    const { width, height } = screen.getPrimaryDisplay().bounds
-    overlayWindow = new BrowserWindow({
-      width,
-      height,
-      x: 0,
-      y: 0,
-      frame: false,
-      transparent: true,
-      fullscreen: true,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      movable: false,
-      resizable: false,
-      focusable: true,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') },
-    })
-    const overlayHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
-      html,body{margin:0;padding:0;background:rgba(0,0,0,0.25);height:100%;cursor:crosshair}
-      canvas{display:block;width:100vw;height:100vh}
-      .toolbar{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
-      button{background:#111827cc;color:#fff;border:1px solid #374151;padding:8px 12px;border-radius:8px}
-    </style></head><body>
-      <div class="toolbar">
-        <button id="cancel">Cancel</button>
-        <button id="scan">Scan</button>
-      </div>
-      <canvas id="c"></canvas>
-      <script>
-        const { desktopCapturer, screen, ipcRenderer } = require('electron')
-        const c = document.getElementById('c'); const ctx = c.getContext('2d')
-        function fit(){ c.width = window.innerWidth; c.height = window.innerHeight; draw() }
-        window.addEventListener('resize', fit)
-        let img=null, sel=null, drag=null, scaleX=1, scaleY=1
-        async function init(){
-          const primary = screen.getPrimaryDisplay()
-          const scale = primary.scaleFactor||1
-          const size={width:Math.floor(primary.size.width*scale),height:Math.floor(primary.size.height*scale)}
-          const srcs = await desktopCapturer.getSources({ types:['screen'], thumbnailSize:size })
-          const s = srcs.find(x=>x.display_id===String(primary.id))||srcs[0]
-          img = new Image(); img.onload=()=>{ fit() }; img.src = s.thumbnail.toDataURL()
-          scaleX = s.thumbnail.getSize().width / window.innerWidth
-          scaleY = s.thumbnail.getSize().height / window.innerHeight
-        }
-        function draw(){ ctx.clearRect(0,0,c.width,c.height); if(img){ ctx.drawImage(img,0,0,c.width,c.height) } if(sel){ ctx.save(); ctx.strokeStyle='#10b981'; ctx.setLineDash([6,4]); ctx.lineWidth=2; ctx.strokeRect(sel.x,sel.y,sel.w,sel.h); ctx.restore() } }
-        c.addEventListener('mousedown', e=>{ drag={x:e.clientX,y:e.clientY}; sel={x:e.clientX,y:e.clientY,w:0,h:0}; draw() })
-        c.addEventListener('mousemove', e=>{ if(!drag) return; const x=e.clientX,y=e.clientY; sel={x:Math.min(drag.x,x),y:Math.min(drag.y,y),w:Math.abs(x-drag.x),h:Math.abs(y-drag.y)}; draw() })
-        window.addEventListener('mouseup', ()=>{ drag=null })
-        document.getElementById('cancel').onclick=()=>{ ipcRenderer.invoke('overlay:close') }
-        document.getElementById('scan').onclick=()=>{
-          if(!img||!sel||sel.w<5||sel.h<5) { ipcRenderer.invoke('overlay:close'); return }
-          const crop = { x: Math.floor(sel.x*scaleX), y: Math.floor(sel.y*scaleY), w: Math.floor(sel.w*scaleX), h: Math.floor(sel.h*scaleY) }
-          const tmp = document.createElement('canvas'); tmp.width=crop.w; tmp.height=crop.h
-          const tctx = tmp.getContext('2d'); tctx.drawImage(img, crop.x, crop.y, crop.w, crop.h, 0,0,crop.w,crop.h)
-          const dataUrl = tmp.toDataURL('image/png')
-          ipcRenderer.invoke('overlay:emit', dataUrl).then(()=> ipcRenderer.invoke('overlay:close'))
-        }
-        init()
-      </script>
-    </body></html>`
-    overlayWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(overlayHtml))
-    overlayWindow.on('closed', () => { overlayWindow = null })
-  } catch {}
-})
 
-ipcMain.handle('overlay:close', async () => {
-  try { overlayWindow?.close(); overlayWindow = null } catch {}
-})
-
-ipcMain.handle('overlay:emit', async (_evt, dataUrl: string) => {
-  try {
-    // Decode QR from dataUrl in main to avoid shipping more deps; send raw image to renderer to decode using existing jsQR
-    mainWindow?.webContents.send('overlay:result', dataUrl)
-  } catch {}
-})
 
 

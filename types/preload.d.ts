@@ -17,27 +17,14 @@ declare global {
         fileOpenJson: () => Promise<{ name: string; content: string } | null>
         openExternal: (url: string) => Promise<boolean>
         awsSsoLogin: () => Promise<{ ok: boolean; error?: string }>
-        teamList: (region: string, ids: string[]) => Promise<Record<string, string | null>>
-        teamListWithProfile: (region: string, ids: string[], profile?: string) => Promise<Record<string, string | null>>
-        teamCreate: (region: string, name: string, secretString: string, profile?: string) => Promise<string | undefined>
-        teamUpdate: (region: string, id: string, secretString: string) => Promise<boolean>
-        teamDelete: (region: string, id: string, force: boolean) => Promise<boolean>
         teamGetSecretValue: (region: string, secretId: string, profile?: string) => Promise<string | null>
         // Consolidated vault secret helpers
         vaultRead: (region: string, name: string, profile?: string) => Promise<{ success: true; data: string | null } | { success: false; error: string; message: string }>
         vaultWrite: (region: string, name: string, secretString: string, profile?: string) => Promise<boolean>
         // QR / screen capture helpers
         captureScreen: () => Promise<string | null> // returns a data URL (image/png)
-        // Composited active frame via getUserMedia
-        captureActiveFrame: () => Promise<string | null>
-        // OS picker capture via getDisplayMedia
-        captureViaPicker: () => Promise<string | null>
         // Native crop (macOS)
         cropScreen: () => Promise<string | null>
-        // Overlay cropper (legacy)
-        openCropOverlay: () => Promise<void>
-        closeCropOverlay: () => Promise<void>
-        onCropResult: (handler: (text: string) => void) => void
         onLock: (handler: () => void) => void
       }
     }

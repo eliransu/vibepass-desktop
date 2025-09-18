@@ -4,8 +4,9 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { TopBar } from './TopBar'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../../shared/store'
-import { setSelectedVaultId, toggleSidebar, setSelectedItemId, setSearchQuery } from '../../features/ui/uiSlice'
+import { setSelectedVaultId, toggleSidebar, setSelectedItemId, setSearchQuery, toggleCommandPalette, setCommandPaletteOpen } from '../../features/ui/uiSlice'
 import { IconButton } from '../ui/icon-button'
+import { CommandPalette } from '../ui/command-palette'
 import { Icon, PasswordIcon, ApiKeyIcon, NotesIcon, CardsIcon } from '../ui/icon'
 import { useSafeToast } from '../../hooks/useSafeToast'
 
@@ -16,6 +17,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   const selectedVaultId = useSelector((s: RootState) => s.ui.selectedVaultId)
   const { showToast } = useSafeToast()
   const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+  const commandOpen = useSelector((s: RootState) => s.ui.commandPaletteOpen)
 
   // Global AWS identity/SSO error notifications
   useEffect(() => {
@@ -44,6 +46,23 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
     }
   }, [showToast, t])
   
+  // Global Cmd/Ctrl + K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC')
+      const meta = isMac ? e.metaKey : e.ctrlKey
+      if (meta && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        dispatch(toggleCommandPalette())
+      }
+      if (e.key === 'Escape') {
+        dispatch(setCommandPaletteOpen(false))
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [dispatch])
+  
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr] bg-background">
       <div className="sticky top-0 z-50">
@@ -69,7 +88,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                 <div className="w-8 h-8 bg-gradient-primary rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
                   <Icon name="shield" size={18} className="text-primary-foreground" />
                 </div>
-                <span className="font-semibold text-lg text-foreground tracking-tight">{t('app.title')}</span>
+                <span className="text-heading-4 text-foreground crisp-text">{t('app.title')}</span>
                 <IconButton
                   icon="chevron-left"
                   onClick={() => dispatch(toggleSidebar())}
@@ -87,7 +106,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
             {!sidebarCollapsed && (
               <div className="p-3">
                 <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <span className="text-caption font-bold text-muted-foreground uppercase tracking-wide crisp-text">
                     {t('vault.vaults')}
                   </span>
                 </div>
@@ -99,7 +118,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
             <div className={`border-t border-sidebar-border ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
               {!sidebarCollapsed && (
                 <div className="mb-3">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-caption font-bold text-muted-foreground uppercase tracking-wide crisp-text">
                     {t('nav.categories')}
                   </span>
                 </div>
@@ -107,7 +126,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
               <nav className="space-y-1">
                 <NavLink 
                   className={({isActive}) => `
-                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
+                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-semibold crisp-text transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
                     ${isActive 
                       ? 'bg-sidebar-active text-primary shadow-sm border-primary-border' 
                       : 'text-foreground hover:bg-sidebar-hover hover:text-foreground hover:shadow-xs border-transparent hover:border-border/50'
@@ -124,7 +143,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
 
                 <NavLink 
                   className={({isActive}) => `
-                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
+                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-semibold crisp-text transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
                     ${isActive 
                       ? 'bg-sidebar-active text-primary shadow-sm border-primary-border' 
                       : 'text-foreground hover:bg-sidebar-hover hover:text-foreground hover:shadow-xs border-transparent hover:border-border/50'
@@ -141,7 +160,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                 
                 <NavLink 
                   className={({isActive}) => `
-                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
+                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-semibold crisp-text transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
                     ${isActive 
                       ? 'bg-sidebar-active text-primary shadow-sm border-primary-border' 
                       : 'text-foreground hover:bg-sidebar-hover hover:text-foreground hover:shadow-xs border-transparent hover:border-border/50'
@@ -158,7 +177,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                 
                 <NavLink 
                   className={({isActive}) => `
-                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
+                    group flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-semibold crisp-text transition-all duration-200 interactive border ${sidebarCollapsed ? 'justify-center' : ''}
                     ${isActive 
                       ? 'bg-sidebar-active text-primary shadow-sm border-primary-border' 
                       : 'text-foreground hover:bg-sidebar-hover hover:text-foreground hover:shadow-xs border-transparent hover:border-border/50'
@@ -181,6 +200,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
           {children}
         </main>
       </div>
+      {commandOpen && <CommandPalette onClose={() => dispatch(setCommandPaletteOpen(false))} />}
     </div>
   )
 }
@@ -220,7 +240,7 @@ function VaultsList({ storageMode }: { storageMode?: 'cloud' | 'local' }): React
             }
           }} 
           className={`
-            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left interactive border
+            w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-body-sm font-semibold crisp-text transition-all duration-200 text-left interactive border enhanced-card
             ${selected === vault.id 
               ? 'bg-sidebar-active text-primary shadow-sm border-primary-border' 
               : 'text-foreground hover:bg-sidebar-hover hover:shadow-xs border-transparent hover:border-border/50'

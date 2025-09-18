@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from '../../shared/store'
 import { useListQuery, useCreateMutation, useRemoveMutation, useUpdateMutation, type VaultItem } from '../services/vaultApi'
 import { MasterGate } from '../features/security/MasterGate'
-import { resolveVaultContext } from '../services/vaultPaths'
+import { resolveVaultContext, getVaultSecretNameWithOverrides } from '../services/vaultPaths'
 import { useTranslation } from 'react-i18next'
 import { decryptJson } from '../../shared/security/crypto'
 import { setSelectedItemId, setSearchQuery, setAwsAccountId } from '../features/ui/uiSlice'
@@ -15,6 +16,8 @@ import { copyWithFeedback } from '../lib/clipboard'
 import { useSafeToast } from '../hooks/useSafeToast'
 
 function Content(): React.JSX.Element {
+  const location = useLocation() as any
+  const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const { t } = useTranslation()
   const { showToast } = useSafeToast()
   const dispatch = useDispatch()
@@ -26,11 +29,12 @@ function Content(): React.JSX.Element {
   const uid = user?.uid ?? ''
   const email = user?.email ?? ''
   const awsRegion = useSelector((s: RootState) => s.ui.awsRegion)
-  const awsProfile = useSelector((s: RootState) => s.ui.awsProfile)
+  // AWS profile is no longer used; SSO JSON config provides context
   const awsAccountId = useSelector((s: RootState) => s.ui.awsAccountId)
   const storageMode = useSelector((s: RootState) => s.ui.storageMode)
-  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }, { skip: !uid || !key, refetchOnMountOrArgChange: true, refetchOnFocus: true, refetchOnReconnect: true })
-  const isSsoMissingOrExpired = storageMode === 'cloud' && !awsAccountId
+  const { data, isFetching, error } = useListQuery({ uid, key: key ?? '', selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId }, { skip: !uid || !key, refetchOnMountOrArgChange: true, refetchOnFocus: true, refetchOnReconnect: true })
+  const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
+  const isSsoMissingOrExpired = storageMode === 'cloud' && (!!ssoRequired || !awsAccountId)
   const [createItem] = useCreateMutation()
   const [updateItem] = useUpdateMutation()
   const [removeItem] = useRemoveMutation()
@@ -39,6 +43,13 @@ function Content(): React.JSX.Element {
     .filter(i => i.category === 'api-keys')
     .filter(i => !search || i.title.toLowerCase().includes(search.toLowerCase()) || (i.notes ?? '').toLowerCase().includes(search.toLowerCase()))
   , [data, search])
+
+  // Ensure selection is set from route preloaded item immediately upon navigation
+  useEffect(() => {
+    if (routePreloaded && routePreloaded.id && selectedId !== routePreloaded.id) {
+      try { dispatch(setSelectedItemId(routePreloaded.id)) } catch {}
+    }
+  }, [routePreloaded, routePreloaded?.id, selectedId, dispatch])
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null)
@@ -66,7 +77,7 @@ function Content(): React.JSX.Element {
           return
         }
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, base.ssmArn, awsProfile || profile)
+        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, base.ssmArn, profile)
         if (cancelled) return
         if (secret) {
           try {
@@ -84,7 +95,37 @@ function Content(): React.JSX.Element {
     }
     void loadRemote()
     return () => { cancelled = true }
-  }, [selectedId, storageMode, uid, key, selectedVaultId, email, awsRegion, awsProfile, data])
+  }, [selectedId, storageMode, uid, key, selectedVaultId, email, awsRegion, data])
+
+  // Fallback: if navigating via palette and list hasn't populated yet, read consolidated vault directly
+  useEffect(() => {
+    let cancelled = false
+    async function loadDirectFromVault(): Promise<void> {
+      try {
+        if (!selectedId || storageMode !== 'cloud' || !uid || !key) return
+        if (!awsRegion || !awsAccountId) return
+        if (items.find(x => x.id === selectedId)) return
+        const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
+        const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
+        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        if (cancelled) return
+        if (!res || res.success !== true) return
+        const secret = res.data
+        let parsed: Record<string, VaultItem> = {}
+        try {
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+        } catch {
+          try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
+        }
+        const found = parsed[selectedId]
+        if (found) {
+          setResolvedItem({ ...found })
+        }
+      } catch {}
+    }
+    void loadDirectFromVault()
+    return () => { cancelled = true }
+  }, [selectedId, storageMode, uid, key, selectedVaultId, email, awsRegion, awsAccountId, items])
 
   // Reset local UI state when storage mode changes
   useEffect(() => {
@@ -97,6 +138,15 @@ function Content(): React.JSX.Element {
       dispatch(setSearchQuery(''))
     } catch {}
   }, [storageMode, dispatch])
+
+  // When selection changes via command palette, mimic list item click side-effects
+  useEffect(() => {
+    if (!selectedId) return
+    try {
+      setShowCreateForm(false)
+      setEditingItem(null)
+    } catch {}
+  }, [selectedId])
 
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
@@ -173,10 +223,10 @@ function Content(): React.JSX.Element {
     try {
       setIsSubmitting(true)
       if (editingItem) {
-        const pr: any = updateItem({ uid, key, item: { ...item, id: editingItem.id }, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
+        const pr: any = updateItem({ uid, key, item: { ...item, id: editingItem.id }, selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         await (pr?.unwrap ? pr.unwrap() : pr)
       } else {
-        const pr: any = createItem({ uid, key, item, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
+        const pr: any = createItem({ uid, key, item, selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         await (pr?.unwrap ? pr.unwrap() : pr)
       }
       resetForm()
@@ -212,7 +262,7 @@ function Content(): React.JSX.Element {
       try {
         setIsDeleting(true)
         {
-          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
+          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId })
           await (pr?.unwrap ? pr.unwrap() : pr)
         }
         setDeleteConfirm({isOpen: false, item: null})
@@ -401,7 +451,7 @@ function Content(): React.JSX.Element {
           </div>
         ) : selectedId ? (
           (() => {
-            const it = (resolvedItem ?? items.find(x => x.id === selectedId))
+            const it = (routePreloaded && routePreloaded.id === selectedId) ? routePreloaded : (resolvedItem ?? items.find(x => x.id === selectedId))
             if (!it) return (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
@@ -462,7 +512,7 @@ function Content(): React.JSX.Element {
                               try {
                                 const { resolveVaultContext } = await import('../services/vaultPaths')
                                 const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-                                const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, it.ssmArn, awsProfile || profile)
+                                const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, it.ssmArn, profile)
                                 if (secret) {
                                   const decrypted = decryptJson<VaultItem>(secret, key ?? '')
                                   await copyWithFeedback(decrypted.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
@@ -500,6 +550,10 @@ function Content(): React.JSX.Element {
               <p className="text-sm text-muted-foreground max-w-sm">
                 {t('vault.selectDescription')}
               </p>
+              <div className="mt-4 text-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">{navigator.platform.toUpperCase().includes('MAC') ? '⌘' : 'Ctrl'}</kbd>
+                +<kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">K</kbd> to search any key by name or #tag.
+              </div>
             </div>
           </div>
         )}
@@ -520,7 +574,7 @@ function Content(): React.JSX.Element {
   )
 }
 
-export default function ApiKeys(): React.JSX.Element {
+export function ApiKeys(): React.JSX.Element {
   return (
     <MasterGate>
       <Content />

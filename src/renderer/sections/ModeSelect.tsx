@@ -5,14 +5,9 @@ import { useTranslation } from 'react-i18next'
 import { setStorageMode } from '../features/ui/uiSlice'
 
 export function ModeSelect(): React.JSX.Element {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const dispatch = useDispatch()
   const navigate = useNavigate()
-
-  React.useEffect(() => {
-    const dir = (i18n.language || 'en').startsWith('he') ? 'rtl' : 'ltr'
-    document.documentElement.setAttribute('dir', dir)
-  }, [i18n.language])
 
   const [step, setStep] = React.useState<number>(0)
 
@@ -44,6 +39,10 @@ export function ModeSelect(): React.JSX.Element {
               <li>{t('onboarding.aboutPoint2')}</li>
               <li>{t('onboarding.aboutPoint3')}</li>
             </ul>
+            <div className="rounded-lg border p-3 bg-muted/30 text-xs text-muted-foreground">
+              Tip: Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">{navigator.platform.toUpperCase().includes('MAC') ? '⌘' : 'Ctrl'}</kbd>
+              +<kbd className="px-1.5 py-0.5 rounded border border-border bg-muted">K</kbd> to search any item by name or #tag from anywhere.
+            </div>
             <div className="flex items-center justify-between pt-2">
               <button className="h-10 px-4 rounded-lg border hover:bg-muted" onClick={() => setStep(0)}>{t('onboarding.back')}</button>
               <button className="h-10 px-4 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setStep(2)}>{t('onboarding.next')}</button>

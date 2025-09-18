@@ -30,7 +30,7 @@ Prerequisites
 - Node.js 18+
 - npm 9+
 - macOS, Windows, or Linux
-- Optional (for team/enterprise features): AWS CLI v2 with SSO and an AWS profile; Firebase project if you want cloud metadata sync
+- Optional: AWS account (Secrets Manager) for cloud vaults; Firebase project for metadata sync (optional)
 
 Install
 
@@ -54,7 +54,7 @@ npm run dist
 npm run dist:mac
 ```
 
-### Configuration
+### Configuration (English‑only UI)
 
 Firebase (optional, used for lightweight item metadata): create `.env` with
 
@@ -69,11 +69,32 @@ FIREBASE_APP_ID=...
 
 If these are absent, the app runs locally with empty remote metadata and full local encryption.
 
-AWS (optional, enables consolidated per‑vault storage and team workflows)
+AWS (optional, enables consolidated per‑vault storage)
 
-- Install AWS CLI v2 and configure SSO/profile
-- In the app’s top bar, choose your `AWS Profile` and `AWS Region`
-- Click SSO Login, then cloudpass.dev will read/write a single encrypted blob per vault to AWS Secrets Manager
+- In the app’s top bar, click “Load CloudPass config” and paste JSON like:
+
+```
+{
+  "region": "us-east-1",
+  "cloudAccountId": "123456789012",
+  "loginUrl": "https://example.awsapps.com/start",
+  "roleName": "AdministratorAccess"
+}
+```
+
+- Or use static keys:
+
+```
+{
+  "region": "us-east-1",
+  "cloudAccountId": "123456789012",
+  "accessKeyId": "...",
+  "secretAccessKey": "...",
+  "sessionToken": "..." // optional
+}
+```
+
+- Click SSO Login (for SSO configs). CloudPass reads/writes one encrypted JSON blob per vault in AWS Secrets Manager.
 
 ### Security Model
 
@@ -98,11 +119,10 @@ Key files to explore
 - `src/shared/security/crypto.ts` – PBKDF2 + AES helpers
 - `src/renderer/services/vaultApi.ts` – CRUD, Firestore metadata + AWS consolidated blob
 - `src/main/preload.ts` and `types/preload.d.ts` – secure bridge API
-- `src/renderer/i18n.ts` – i18n resources (en/he)
+- `src/renderer/i18n.ts` – i18n (English‑only)
 
 ### Troubleshooting
 
-- AWS CLI not found: install AWS CLI v2 and ensure it’s on PATH, or set `AWS_CLI_PATH`
 - AWS SSO expired: click SSO Login in the top bar; errors will mention expired tokens
 - Firebase misconfigured: you’ll see an in‑app banner; set `.env` or proceed without cloud metadata
 

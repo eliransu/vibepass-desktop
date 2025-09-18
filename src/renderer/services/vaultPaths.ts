@@ -16,7 +16,7 @@ export function resolveVaultContext(params: { uid: string; selectedVaultId: stri
   if (!savedRegion) {
     throw new Error('Region is required but not provided')
   }
-  const savedProfile = (typeof localStorage !== 'undefined' && localStorage.getItem('awsProfile'))
+  const savedProfile = undefined
   const tenant = (typeof localStorage !== 'undefined' && localStorage.getItem('tenant')) || deriveTenantFromEmail(email) || 'default'
   const accountId = accountIdOverride || (typeof localStorage !== 'undefined' && localStorage.getItem('awsAccountId'))
   if (!accountId) {

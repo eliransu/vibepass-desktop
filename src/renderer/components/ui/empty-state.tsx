@@ -17,9 +17,9 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
             <Icon name="help-circle" size={32} className="text-muted-foreground" />
           )}
         </div>
-        <h3 className="text-lg font-medium text-foreground mb-2">{title}</h3>
+        <h3 className="text-heading-4 text-foreground mb-2 crisp-text">{title}</h3>
         {description && (
-          <p className="text-sm text-muted-foreground mb-4">{description}</p>
+          <p className="text-body-sm text-muted-foreground mb-4 crisp-text">{description}</p>
         )}
         {action}
       </div>

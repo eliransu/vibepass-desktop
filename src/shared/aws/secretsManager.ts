@@ -1,4 +1,4 @@
-import { SecretsManagerClient, GetSecretValueCommand, CreateSecretCommand, PutSecretValueCommand, DeleteSecretCommand, ListSecretsCommand, type SecretListEntry } from '@aws-sdk/client-secrets-manager'
+import { SecretsManagerClient, GetSecretValueCommand, CreateSecretCommand, PutSecretValueCommand, DeleteSecretCommand } from '@aws-sdk/client-secrets-manager'
 import { fromSSO } from '@aws-sdk/credential-providers'
 
 export type CloudPassConfig = {
@@ -54,26 +54,17 @@ export async function createSecret(
   secretString: string,
   tags?: { team?: string; department?: string }
 ): Promise<string | undefined> {
-  // const parts = name.split('/')
-  // const ownerCandidate = parts[4] || 'unknown'
-  // const isWork = ownerCandidate === 'team' || name.includes('/team/')
-  // const ownerUid = isWork ? 'team' : ownerCandidate
   const payload = { 
     Name: name, 
     SecretString: secretString,
     Tags: [
       { Key: 'App', Value: 'cloudpass' },
-      // { Key: 'Scope', Value: isWork ? 'work' : 'personal' },
-      // { Key: 'OwnerUid', Value: ownerUid },
     ],
   } 
-  // if (tags?.team) {
-  //   ;(payload.Tags as Array<{ Key: string; Value: string }>).push({ Key: 'Team', Value: String(tags.team) })
-  // }
   if (tags?.department) {
     ;(payload.Tags as Array<{ Key: string; Value: string }>).push({ Key: 'Department', Value: String(tags.department) })
   }
-  console.log('createSecret', payload)
+  // Intentionally avoid logging secret payloads in production builds
   const res = await client.send(new CreateSecretCommand(payload))
   return res.ARN
 }
@@ -86,49 +77,6 @@ export async function deleteSecret(client: SecretsManagerClient, secretId: strin
   await client.send(new DeleteSecretCommand({ SecretId: secretId, ForceDeleteWithoutRecovery: force }))
 }
 
-export type TeamSecretMeta = {
-  arn?: string
-  name?: string
-  description?: string
-  lastChangedDate?: Date
-}
-
-export async function listAppSecrets(client: SecretsManagerClient): Promise<TeamSecretMeta[]> {
-  const items: TeamSecretMeta[] = []
-  let nextToken: string | undefined
-  do {
-    const res = await client.send(new ListSecretsCommand({
-      NextToken: nextToken,
-      Filters: [
-        { Key: 'tag-key', Values: ['App'] },
-        { Key: 'tag-value', Values: ['cloudpass'] },
-      ],
-      MaxResults: 50,
-    }))
-    for (const s of (res.SecretList ?? []) as SecretListEntry[]) {
-      items.push({
-        arn: s.ARN,
-        name: s.Name,
-        description: s.Description,
-        lastChangedDate: s.LastChangedDate,
-      })
-    }
-    nextToken = res.NextToken
-  } while (nextToken)
-  return items
-}
-
-export async function upsertSecretByName(client: SecretsManagerClient, name: string, secretString: string, tags?: { team?: string; department?: string }): Promise<string | undefined> {
-  try {
-    return await createSecret(client, name, secretString, tags)
-  } catch (e: any) {
-    try {
-      await putSecret(client, name, secretString)
-      return name
-    } catch {
-      throw e
-    }
-  }
-}
+// Removed listAppSecrets and upsertSecretByName (not used in current flows)
 
 
