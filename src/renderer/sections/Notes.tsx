@@ -16,6 +16,7 @@ import DOMPurify from 'dompurify'
 function Content(): React.JSX.Element {
   const location = useLocation() as any
   const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
+  const preloadedId = routePreloaded?.id
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const user = useSelector((s: RootState) => s.auth.user)
@@ -140,10 +141,10 @@ function Content(): React.JSX.Element {
 
   // Ensure selection is set from route preloaded item immediately upon navigation
   useEffect(() => {
-    if (routePreloaded && routePreloaded.id && selectedId !== routePreloaded.id) {
-      try { dispatch(setSelectedItemId(routePreloaded.id)) } catch {}
+    if (preloadedId && selectedId !== preloadedId) {
+      try { dispatch(setSelectedItemId(preloadedId)) } catch {}
     }
-  }, [routePreloaded?.id, selectedId, dispatch])
+  }, [preloadedId, selectedId, dispatch])
 
   // Reset local UI state when storage mode changes
   useEffect(() => {
