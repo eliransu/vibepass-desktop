@@ -27,7 +27,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
         const code = String(detail.code || '')
         const message = String(detail.message || '')
         if (code === 'SessionRequired') {
-          showToast(t('team.ssoLoginCta') as string, 'error')
+          // Suppress startup flash: do not toast on initial SSO session requirement
           return
         }
         if (code === 'SsoLoginFailed') {

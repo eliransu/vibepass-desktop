@@ -1,4 +1,4 @@
-import i18n from 'i18next'
+import { default as i18n } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 const resources = {
@@ -131,7 +131,7 @@ const resources = {
         cropReset: 'Reset selection',
       },
       search: {
-        placeholder: 'Search…',
+        placeholder: 'Type or use Command+K',
         select: 'Select an item to view details',
       },
       theme: {

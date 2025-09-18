@@ -35,6 +35,12 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
     })()
   }, [])
 
+  // Initialize theme early for unlock screens
+  useEffect(() => {
+    const theme = localStorage.getItem('theme') || 'dark'
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [])
+
   // Auto-lock disabled; only explicit lock should clear the key (not used now)
 
   const disabled = useMemo(() => {
@@ -147,7 +153,9 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
   // Show unlock animation
   if (isUnlocking) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-br from-primary/5 to-primary/10">
+      <div className="flex min-h-screen items-center justify-center p-6 bg-background">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10 pointer-events-none"></div>
+        <div className="relative z-10">
         <div className="text-center">
           <div className="mb-8">
             {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
@@ -167,13 +175,14 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
             {t('master.welcome')}
           </div>
         </div>
+        </div>
       </div>
     )
   }
   
   if (hasSetup === null || biometricLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex min-h-screen items-center justify-center p-6 bg-background">
         <div className="text-center">
           {biometricLoading ? (
             <div className="relative mb-6">
@@ -200,8 +209,8 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md border rounded-2xl shadow-xl bg-background">
+    <div className="flex min-h-screen items-center justify-center p-6 bg-background">
+      <div className="w-full max-w-md border border-border rounded-2xl shadow-xl bg-card">
         <div className="flex justify-center py-8">
           {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
           {/* @ts-ignore */}
@@ -214,20 +223,20 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
           />
         </div>
         <form onSubmit={handleSubmit} className="px-6 pb-8 space-y-4">
-          <h1 className="text-xl font-semibold text-center">{hasSetup ? t('master.unlock') : t('master.create')}</h1>
+          <h1 className="text-xl font-semibold text-center text-foreground">{hasSetup ? t('master.unlock') : t('master.create')}</h1>
           <div className="space-y-2">
-            <label className="block text-sm">{t('master.password')}</label>
-            <input autoFocus type="password" className="w-full border rounded px-3 py-2 bg-background" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <label className="block text-sm text-foreground">{t('master.password')}</label>
+            <input autoFocus type="password" className="w-full border border-border rounded px-3 py-2 bg-input text-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {!hasSetup && (
             <div className="space-y-2">
-              <label className="block text-sm">{t('master.confirm')}</label>
-              <input type="password" className="w-full border rounded px-3 py-2 bg-background" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              <label className="block text-sm text-foreground">{t('master.confirm')}</label>
+              <input type="password" className="w-full border border-border rounded px-3 py-2 bg-input text-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </div>
           )}
-          {error && <div className="text-sm text-red-600">{error}</div>}
+          {error && <div className="text-sm text-destructive">{error}</div>}
           <div className="flex flex-col gap-3 items-center">
-            <button disabled={disabled} className="w-full h-10 rounded bg-primary text-primary-foreground disabled:opacity-50 max-w-xs">
+            <button disabled={disabled} className="w-full h-10 rounded bg-primary text-primary-foreground disabled:opacity-50 max-w-xs hover:bg-primary-hover focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors">
               {hasSetup ? t('master.unlockBtn') : t('master.createBtn')}
             </button>
             {hasSetup && (
@@ -235,7 +244,7 @@ export function MasterGate({ children }: { children: React.ReactNode }): React.J
                 type="button" 
                 onClick={tryBiometricUnlock}
                 disabled={biometricLoading}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none rounded"
               >
                 <Icon name="fingerprint" size={16} />
                 {biometricAvailable ? (biometricLoading ? t('master.biometric.unlocking') : t('master.biometric.unlock')) : t('master.biometric.invalid')}

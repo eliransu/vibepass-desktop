@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { createHashRouter, RouterProvider, Navigate, Outlet, useNavigate, useRouteError } from 'react-router-dom'
 import { Provider, useDispatch, useSelector } from 'react-redux'
 import { store, RootState } from '../shared/store'
+import { vaultApi } from './services/vaultApi'
 import { Shell } from './components/layout/Shell'
 import { ToastProvider } from './components/ui/toast-provider'
 import { MasterGate } from './features/security/MasterGate'
@@ -63,6 +64,7 @@ export function AppRouter(): React.JSX.Element {
   function WithAuth(): React.JSX.Element {
     const dispatch = useDispatch()
     const storageMode = useSelector((s: RootState) => s.ui.storageMode)
+    const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
     React.useEffect(() => {
       // Always resolve from AWS STS; never reuse cached local user
       const preload = (window as any).cloudpass as any
@@ -97,8 +99,7 @@ export function AppRouter(): React.JSX.Element {
             return
           }
           if (res.code === 'SessionRequired') {
-            const event = new CustomEvent('aws-identity-error', { detail: { message: 'SSO session required', code: 'SessionRequired' } })
-            window.dispatchEvent(event)
+            // Avoid flashing a toast on startup; just set state and return
             dispatch(setSsoRequired(true))
             applyUser(null)
             return
@@ -113,7 +114,14 @@ export function AppRouter(): React.JSX.Element {
         }
       }
       void resolveIdentity()
-    }, [dispatch, storageMode])
+    }, [dispatch, storageMode, ssoRequired])
+
+    // After SSO success (ssoRequired becomes false), force RTK Query cache reset to refetch vault data
+    React.useEffect(() => {
+      if (storageMode === 'cloud' && ssoRequired === false) {
+        try { store.dispatch(vaultApi.util.resetApiState()) } catch {}
+      }
+    }, [ssoRequired, storageMode])
     return (
       <ToastProvider>
         <VaultErrorHandler />

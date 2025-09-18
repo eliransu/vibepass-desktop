@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, Menu, ipcMain, systemPreferences, clipboard as mainClipboard, dialog } from 'electron'
 import keytar from 'keytar'
 import Store from 'electron-store'
-import { createSecretsClient, getSecret, createSecret, putSecret, type CloudPassConfig } from '../shared/aws/secretsManager'
+import { createSecretsClient, getSecret, createSecret, putSecret, upsertJsonMergedSecret, type CloudPassConfig } from '../shared/aws/secretsManager'
 import path from 'node:path'
 import http from 'node:http'
 import { URL } from 'node:url'
@@ -271,15 +271,55 @@ ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretS
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
   const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
   const client = createSecretsClient(region, effectiveAuth)
-  // Prefer create; if already exists, fall back to update
-  try {
-    await createSecret(client, name, secretString, { team: cfg?.team, department: cfg?.department })
-  } catch (e: any) {
-    const code = e?.name || e?.code || ''
-    const msg = e?.message || ''
-    const alreadyExists = code === 'ResourceExistsException' || /already ?exists|exists/i.test(msg)
-    if (!alreadyExists) throw e
-    await putSecret(client, name, secretString)
+  // Derive tags per IAM policy (App already applied in createSecret): Department for work, Scope and Owner for personal
+  const parts = String(name || '').split('/')
+  let scope: 'personal' | 'work' | undefined
+  let owner: string | undefined
+  let department: string | undefined
+
+  // Name formats:
+  // work: cloudpass/{tenant}/{accountId}/{region}/{department}/vault
+  // personal: cloudpass/{tenant}/{accountId}/{region}/{uid}/personal/vault
+  if (parts.length >= 7 && parts[5] === 'personal') {
+    scope = 'personal'
+    // Fetch AWS caller identity user id to satisfy ${aws:PrincipalTag/User} match
+    try {
+      const stsRegion = cfg?.region || 'us-east-1'
+      const stsClient = new STSClient({
+        region: stsRegion,
+        credentials: effectiveAuth && (effectiveAuth as any).accessKeyId && (effectiveAuth as any).secretAccessKey ? {
+          accessKeyId: String((effectiveAuth as any).accessKeyId),
+          secretAccessKey: String((effectiveAuth as any).secretAccessKey),
+          sessionToken: (effectiveAuth as any).sessionToken ? String((effectiveAuth as any).sessionToken) : undefined,
+        } : undefined,
+      })
+      const idRes = await stsClient.send(new GetCallerIdentityCommand({}))
+      const userId = idRes.UserId || ''
+      const userIdParts = userId.split(':')
+      owner = (userIdParts.length > 1 ? userIdParts[1] : userId) || undefined
+    } catch {
+      // Fallback to UID segment from name if STS lookup fails
+      owner = parts[4] || undefined
+    }
+  } else if (parts.length >= 6 && parts[5] === 'vault') {
+    scope = 'work'
+    department = parts[4] || cfg?.department || undefined
+  }
+
+  if (scope === 'work') {
+    // For team (non-encrypted) vaults, do server-side read-merge-write to reduce lost updates
+    await upsertJsonMergedSecret(client, name, secretString, { department, scope, owner })
+  } else {
+    // Personal vaults remain encrypted end-to-end; server should not merge
+    try {
+      await createSecret(client, name, secretString, { department, scope, owner })
+    } catch (e: any) {
+      const code = e?.name || e?.code || ''
+      const msg = e?.message || ''
+      const alreadyExists = code === 'ResourceExistsException' || /already ?exists|exists/i.test(msg)
+      if (!alreadyExists) throw e
+      await putSecret(client, name, secretString)
+    }
   }
   return true
 })
