@@ -14,7 +14,7 @@ import { marked } from 'marked'
 import { Icon } from '../components/ui/icon'
 import DOMPurify from 'dompurify'
 function Content(): React.JSX.Element {
-  const location = useLocation() as any
+  const location = useLocation()
   const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const preloadedId = routePreloaded?.id
   const { t } = useTranslation()
@@ -61,13 +61,14 @@ function Content(): React.JSX.Element {
 
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
-    try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+    try { void window.cloudpass?.storeSet?.('awsAccountId', '') } catch {}
     try { dispatch(setAwsAccountId('')) } catch {}
   }, [dispatch])
 
   useEffect(() => {
     if (!error) return
-    const msg = String((error as any)?.error ?? (error as any)?.data?.error ?? (error as any)?.message ?? '')
+    const anyErr = error as unknown as { error?: string; data?: { error?: string }; message?: string }
+    const msg = String(anyErr?.error ?? anyErr?.data?.error ?? anyErr?.message ?? '')
     if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
       clearAwsAccountContext()
     }
@@ -84,21 +85,21 @@ function Content(): React.JSX.Element {
     const onUp = () => {
       setIsResizing(false)
       localStorage.setItem('listPaneWidth', String(listWidth))
-      if ((window as any).cloudpass?.storeSet) {
-        void (window as any).cloudpass.storeSet('listPaneWidth', String(listWidth))
+      if (window.cloudpass?.storeSet) {
+        void window.cloudpass.storeSet('listPaneWidth', String(listWidth))
       }
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     document.body.style.cursor = 'col-resize'
-    ;(document.body.style as any).userSelect = 'none'
+    ;(document.body.style as unknown as { userSelect?: string }).userSelect = 'none'
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
   }, [isResizing, listWidth])
 
@@ -121,13 +122,13 @@ function Content(): React.JSX.Element {
         if (notes.find(x => x.id === selectedId)) return
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
-        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        const res = await window.cloudpass?.vaultRead?.({ region: String(awsRegion || region), name: String(name), profile })
         if (cancelled) return
         if (!res || res.success !== true) return
-        const secret = res.data
+        const secret = res.data ?? ''
         let parsed: Record<string, VaultItem> = {}
         try {
-          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key || '')
         } catch {
           try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
         }
@@ -301,7 +302,7 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background min-w-0">
+      <div className="flex-1 bg-background min-h-0 min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
@@ -315,7 +316,7 @@ function Content(): React.JSX.Element {
               </div>
             </div>
             
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 min-h-0 overflow-auto p-6">
               <form onSubmit={handleSubmit} className="h-full flex flex-col max-w-2xl space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')} <span className="text-destructive">*</span></label>
@@ -409,7 +410,8 @@ function Content(): React.JSX.Element {
                           if (!uid || !key) return
                           try {
                             setIsDeleting(true)
-                            await (removeItem({ uid, key, id: note.id, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId }) as any).unwrap?.() ?? removeItem({ uid, key, id: note.id, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
+                            const pr = removeItem({ uid, key, id: note.id, selectedVaultId, regionOverride: awsRegion, profileOverride: awsProfile, accountIdOverride: awsAccountId })
+                            await (pr as unknown as { unwrap?: () => Promise<void> }).unwrap?.() ?? pr
                             if (selectedId === note.id) {
                               dispatch(setSelectedItemId(null))
                             }
@@ -440,10 +442,10 @@ function Content(): React.JSX.Element {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-auto p-6">
+                <div className="flex-1 min-h-0 overflow-auto p-6">
                   <div className="max-w-4xl">
                     {note.notes && (
-                      <div className="w-full p-4 bg-muted/50 rounded-lg text-sm leading-relaxed border border-border">
+                      <div className="w-full p-4 bg-muted/50 rounded-lg text-sm leading-relaxed border border-border break-all">
                         <div
                           className="prose prose-invert max-w-none"
                           dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(note.notes || '') as string) }}

@@ -15,7 +15,7 @@ import { Icon } from '../components/ui/icon'
 import { copyToClipboard } from '../lib/clipboard'
 
 function Content(): React.JSX.Element {
-  const location = useLocation() as any
+  const location = useLocation()
   const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const { t } = useTranslation()
   const dispatch = useDispatch()
@@ -58,13 +58,14 @@ function Content(): React.JSX.Element {
 
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
-    try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+    try { void window.cloudpass?.storeSet?.('awsAccountId', '') } catch {}
     try { dispatch(setAwsAccountId('')) } catch {}
   }, [dispatch])
 
   useEffect(() => {
     if (!error) return
-    const msg = String((error as any)?.error ?? (error as any)?.data?.error ?? (error as any)?.message ?? '')
+    const anyErr = error as unknown as { error?: string; data?: { error?: string }; message?: string }
+    const msg = String(anyErr?.error ?? anyErr?.data?.error ?? anyErr?.message ?? '')
     if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
       clearAwsAccountContext()
     }
@@ -85,13 +86,13 @@ function Content(): React.JSX.Element {
         if (cards.find(x => x.id === selectedId)) return
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email: user?.email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
-        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        const res = await window.cloudpass?.vaultRead?.({ region: String(awsRegion || region), name: String(name), profile })
         if (cancelled) return
         if (!res || res.success !== true) return
-        const secret = res.data
+        const secret = res.data ?? ''
         let parsed: Record<string, VaultItem> = {}
         try {
-          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key || '')
         } catch {
           try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
         }
@@ -125,21 +126,21 @@ function Content(): React.JSX.Element {
     const onUp = () => {
       setIsResizing(false)
       localStorage.setItem('listPaneWidth', String(listWidth))
-      if ((window as any).cloudpass?.storeSet) {
-        void (window as any).cloudpass.storeSet('listPaneWidth', String(listWidth))
+      if (window.cloudpass?.storeSet) {
+        void window.cloudpass.storeSet('listPaneWidth', String(listWidth))
       }
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     document.body.style.cursor = 'col-resize'
-    ;(document.body.style as any).userSelect = 'none'
+    ;(document.body.style as unknown as { userSelect?: string }).userSelect = 'none'
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
   }, [isResizing, listWidth])
 
@@ -392,7 +393,7 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background min-w-0">
+      <div className="flex-1 bg-background min-h-0 min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
@@ -406,7 +407,7 @@ function Content(): React.JSX.Element {
               </div>
             </div>
             
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 min-h-0 overflow-auto p-6">
               <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
@@ -528,13 +529,13 @@ function Content(): React.JSX.Element {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-auto p-6">
+                <div className="flex-1 min-h-0 overflow-auto p-6">
                   <div className="max-w-2xl space-y-6">
                     {cardData.number && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-foreground">{t('fields.cardNumber')}</label>
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 h-12 px-4 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
+                          <div className="flex-1 h-auto min-h-12 px-4 py-2 bg-muted/50 rounded-lg flex items-start font-mono text-sm break-all whitespace-pre-wrap">
                             <>•••• •••• •••• {cardData.number.slice(-4)}</>
                           </div>
                           <button 
@@ -554,7 +555,7 @@ function Content(): React.JSX.Element {
                       {cardData.expiry && (
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-foreground">{t('fields.expiryDate')}</label>
-                          <div className="h-12 px-4 bg-muted/50 rounded-lg flex items-center text-sm">
+                          <div className="h-auto min-h-12 px-4 py-2 bg-muted/50 rounded-lg flex items-start text-sm break-all whitespace-pre-wrap">
                             {cardData.expiry}
                           </div>
                         </div>
@@ -564,7 +565,7 @@ function Content(): React.JSX.Element {
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-foreground">{t('fields.cvv')}</label>
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-12 px-4 bg-muted/50 rounded-lg flex items-center font-mono text-sm">
+                            <div className="flex-1 h-auto min-h-12 px-4 py-2 bg-muted/50 rounded-lg flex items-start font-mono text-sm break-all whitespace-pre-wrap">
                               {'•••'}
                             </div>
                             <button 

@@ -23,7 +23,7 @@ const Cards = React.lazy(() => import('./sections/Cards').then(m => ({ default: 
 
 function ErrorPage(): React.JSX.Element {
   const navigate = useNavigate()
-  const error: any = useRouteError()
+  const error = useRouteError() as { statusText?: string; message?: string } | null
   const { t } = useTranslation()
   return (
     <div className="h-full flex items-center justify-center p-6">
@@ -67,8 +67,8 @@ export function AppRouter(): React.JSX.Element {
     const ssoRequired = useSelector((s: RootState) => s.ui.ssoRequired)
     React.useEffect(() => {
       // Always resolve from AWS STS; never reuse cached local user
-      const preload = (window as any).cloudpass as any
-      const applyUser = (user: any | null) => {
+      const preload = window.cloudpass
+      const applyUser = (user: { uid: string; email: string; displayName: string; photoURL: string } | null) => {
         if (user && user.uid) {
           localStorage.setItem('offlineUser', JSON.stringify(user))
           dispatch(setUser(user))
@@ -90,9 +90,9 @@ export function AppRouter(): React.JSX.Element {
         }
         if (!(preload && typeof preload.getAwsUserIdentity === 'function')) { applyUser(null); return }
         try {
-          const res = await preload.getAwsUserIdentity() as { ok: true; userId: string } | { ok: false; error: string; code?: string }
+          const res = await preload.getAwsUserIdentity()
           if (res.ok === true) {
-            const username = (res.userId || '').trim()
+            const username = String(res.userId || '').trim()
             if (username.length === 0) { applyUser(null); return }
             applyUser({ uid: username, email: `${username}@cloudpass.aws`, displayName: username, photoURL: '' })
             dispatch(setSsoRequired(false))
@@ -107,8 +107,10 @@ export function AppRouter(): React.JSX.Element {
           const event = new CustomEvent('aws-identity-error', { detail: { message: res.error, code: res.code || 'UnknownError' } })
           window.dispatchEvent(event)
           applyUser(null)
-        } catch (e: any) {
-          const event = new CustomEvent('aws-identity-error', { detail: { message: e?.message || 'Unknown error', code: e?.name || 'UnknownError' } })
+        } catch (e: unknown) {
+          const message = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
+          const code = typeof e === 'object' && e && 'name' in e ? String((e as { name?: unknown }).name) : 'UnknownError'
+          const event = new CustomEvent('aws-identity-error', { detail: { message, code } })
           window.dispatchEvent(event)
           applyUser(null)
         }

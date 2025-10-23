@@ -13,12 +13,12 @@ describe('vaultPaths utilities', () => {
       clear: () => { for (const k of Object.keys(store)) delete store[k] },
       key: (i: number) => Object.keys(store)[i] ?? null,
       length: 0,
-    } as any
+    } as unknown as Storage
   })
 
   afterEach(() => {
     // restore polyfill
-    ;(globalThis as any).localStorage = originalLocalStorage
+    ;(globalThis as unknown as { localStorage: Storage | undefined }).localStorage = originalLocalStorage
   })
 
   test('deriveTenantFromEmail extracts domain or defaults', () => {

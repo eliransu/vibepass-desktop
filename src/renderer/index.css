@@ -11,14 +11,14 @@
   --card-foreground: 210 15% 5%;
   --popover: 0 0% 98%;
   --popover-foreground: 210 15% 5%;
-  
+
   /* Primary - Modern enterprise blue with depth */
   --primary: 221 83% 55%;
   --primary-foreground: 0 0% 100%;
   --primary-hover: 221 83% 50%;
   --primary-light: 221 83% 92%;
   --primary-border: 221 83% 78%;
-  
+
   /* Secondary - Much more prominent grays */
   --secondary: 210 15% 85%;
   --secondary-foreground: 210 15% 5%;
@@ -28,7 +28,7 @@
   --accent: 210 15% 82%;
   --accent-foreground: 210 15% 5%;
   --accent-hover: 210 15% 75%;
-  
+
   /* Status colors - Enterprise appropriate */
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
@@ -39,34 +39,44 @@
   --warning: 38 92% 50%;
   --warning-foreground: 0 0% 100%;
   --warning-light: 38 92% 90%;
-  
+
   /* UI elements with much stronger definition */
   --border: 210 15% 78%;
   --input: 0 0% 100%;
   --ring: 221 83% 55%;
   --radius: 0.5rem;
-  
+
   /* Sidebar specific - Much more defined */
   --sidebar-background: 210 15% 92%;
   --sidebar-border: 210 15% 75%;
   --sidebar-hover: 210 15% 82%;
   --sidebar-active: 221 83% 88%;
-  
+
   /* Much stronger shadows for light mode depth */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.15);
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.18), 0 1px 2px -1px rgb(0 0 0 / 0.18);
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.18), 0 2px 4px -2px rgb(0 0 0 / 0.18);
-  --shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.22), 0 4px 6px -4px rgb(0 0 0 / 0.22);
-  --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.22), 0 10px 10px -5px rgb(0 0 0 / 0.15);
+  --shadow-md:
+    0 10px 15px -3px rgb(0 0 0 / 0.22), 0 4px 6px -4px rgb(0 0 0 / 0.22);
+  --shadow-lg:
+    0 20px 25px -5px rgb(0 0 0 / 0.22), 0 10px 10px -5px rgb(0 0 0 / 0.15);
   --shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  
+
   /* Enhanced glass morphism effects */
   --glass-bg: rgba(255, 255, 255, 0.9);
   --glass-border: rgba(0, 0, 0, 0.08);
-  
+
   /* Gradient backgrounds */
-  --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-hover)) 100%);
-  --gradient-surface: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
+  --gradient-primary: linear-gradient(
+    135deg,
+    hsl(var(--primary)) 0%,
+    hsl(var(--primary-hover)) 100%
+  );
+  --gradient-surface: linear-gradient(
+    135deg,
+    hsl(var(--background)) 0%,
+    hsl(var(--muted)) 100%
+  );
 }
 
 .dark {
@@ -77,14 +87,14 @@
   --card-foreground: 210 11% 92%;
   --popover: 210 11% 8%;
   --popover-foreground: 210 11% 92%;
-  
+
   /* Primary - Enhanced contrast for dark mode */
   --primary: 221 83% 58%;
   --primary-foreground: 210 11% 6%;
   --primary-hover: 221 83% 63%;
   --primary-light: 221 83% 15%;
   --primary-border: 221 83% 25%;
-  
+
   /* Dark sophisticated grays */
   --secondary: 210 11% 12%;
   --secondary-foreground: 210 11% 92%;
@@ -94,7 +104,7 @@
   --accent: 210 11% 14%;
   --accent-foreground: 210 11% 92%;
   --accent-hover: 210 11% 18%;
-  
+
   /* Status colors for dark mode */
   --destructive: 0 72% 60%;
   --destructive-foreground: 0 0% 100%;
@@ -105,33 +115,43 @@
   --warning: 38 92% 58%;
   --warning-foreground: 210 11% 6%;
   --warning-light: 38 92% 15%;
-  
+
   /* Dark UI elements */
   --border: 210 11% 18%;
   --input: 210 11% 12%;
   --ring: 221 83% 58%;
-  
+
   /* Dark sidebar with depth */
   --sidebar-background: 210 11% 4%;
   --sidebar-border: 210 11% 15%;
   --sidebar-hover: 210 11% 12%;
   --sidebar-active: 221 83% 15%;
-  
+
   /* Enhanced dark shadows */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 10px 10px -5px rgb(0 0 0 / 0.2);
+  --shadow-md:
+    0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-lg:
+    0 20px 25px -5px rgb(0 0 0 / 0.5), 0 10px 10px -5px rgb(0 0 0 / 0.2);
   --shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.6);
-  
+
   /* Dark glass morphism */
   --glass-bg: rgba(0, 0, 0, 0.4);
   --glass-border: rgba(255, 255, 255, 0.1);
-  
+
   /* Dark gradients */
-  --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-hover)) 100%);
-  --gradient-surface: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
+  --gradient-primary: linear-gradient(
+    135deg,
+    hsl(var(--primary)) 0%,
+    hsl(var(--primary-hover)) 100%
+  );
+  --gradient-surface: linear-gradient(
+    135deg,
+    hsl(var(--background)) 0%,
+    hsl(var(--muted)) 100%
+  );
 }
 
 /* Base styles */
@@ -139,11 +159,25 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
-  font-feature-settings: "cv03", "cv04", "cv11", "ss01", "ss02";
+  font-family:
+    'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Inter',
+    system-ui,
+    sans-serif;
+  font-feature-settings: 'cv03', 'cv04', 'cv11', 'ss01', 'ss02';
   font-optical-sizing: auto;
   line-height: 1.5;
   letter-spacing: -0.015em;
@@ -151,7 +185,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-weight: 400;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Scrollbar styling */
@@ -180,38 +216,75 @@ body {
 
 /* Enhanced Animation System */
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-from-left {
-  from { transform: translateX(-100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-in-from-right {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slide-up {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes scale-in {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: calc(200px + 100%) 0; }
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
-  50% { box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
 }
 
 .animate-fade-in {
@@ -235,7 +308,12 @@ body {
 }
 
 .animate-shimmer {
-  background: linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--accent)) 50%, hsl(var(--muted)) 100%);
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--accent)) 50%,
+    hsl(var(--muted)) 100%
+  );
   background-size: 200px 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -274,7 +352,9 @@ body {
 
 .focus-enhanced:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  box-shadow:
+    0 0 0 2px hsl(var(--background)),
+    0 0 0 4px hsl(var(--ring));
   transform: scale(1.02);
 }
 
@@ -403,4 +483,3 @@ body {
   transform: translateY(0);
   box-shadow: var(--shadow-xs);
 }
-

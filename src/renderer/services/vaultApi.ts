@@ -28,7 +28,7 @@ export const vaultApi = createApi({
         try {
           const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
           if (storageMode === 'local') {
-            const preload = (window as any).cloudpass as any
+            const preload = window.cloudpass
             const localKey = `localVault:${selectedVaultId}`
             const enc = preload ? await preload.storeGet(localKey) : undefined
             let consolidated: Record<string, VaultItem> = {}
@@ -51,10 +51,10 @@ export const vaultApi = createApi({
           
           // Debug logging removed
           
-          const preload = (window as any).cloudpass as any
+          const preload = window.cloudpass
           let consolidated: Record<string, VaultItem> = {}
           if (preload) {
-            const vaultResult = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const vaultResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             
             // Handle null result (defensive programming)
             if (!vaultResult) {
@@ -83,8 +83,9 @@ export const vaultApi = createApi({
                   ? (JSON.parse(secret) as Record<string, VaultItem>)
                   : decryptJson<Record<string, VaultItem>>(secret, key)
                 // Removed verbose success logs
-              } catch (decryptError: any) {
-                console.error('❌ Decryption failed:', decryptError.message)
+              } catch (decryptError: unknown) {
+                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
+                console.error('❌ Decryption failed:', msg)
                 
                 // Try to determine if the data is actually encrypted
                 try {
@@ -92,7 +93,7 @@ export const vaultApi = createApi({
                   consolidated = parsed as Record<string, VaultItem>
                 } catch {
                   console.error('❌ Secret is neither valid encrypted data nor valid JSON')
-                  throw new Error(`Failed to decrypt vault data: ${decryptError.message}`)
+                  throw new Error(`Failed to decrypt vault data: ${msg}`)
                 }
               }
             } else if (isWork) {
@@ -100,9 +101,10 @@ export const vaultApi = createApi({
             }
           }
           return { data: Object.values(consolidated) }
-        } catch (e: any) {
-          console.error('🚨 Vault API error:', e.message)
-          return { error: { error: e.message } as any }
+        } catch (e: unknown) {
+          const msg = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
+          console.error('🚨 Vault API error:', msg)
+          return { error: { status: 500, data: { error: msg } } }
         }
       },
       providesTags: (result) =>
@@ -114,12 +116,12 @@ export const vaultApi = createApi({
         try {
           const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
           if (storageMode === 'local') {
-            const preload = (window as any).cloudpass as any
+            const preload = window.cloudpass
             const localKey = `localVault:${selectedVaultId}`
-            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            const currentEnc = preload ? await preload.storeGet<string>(localKey) : undefined
             let parsed: Record<string, VaultItem> = {}
             if (currentEnc) {
-              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(String(currentEnc)) } catch { parsed = {} } }
             }
             const newId = item.id && item.id.trim().length > 0 ? item.id : uuidv4()
             parsed[newId] = { ...item, id: newId }
@@ -135,9 +137,9 @@ export const vaultApi = createApi({
           // Update consolidated blob
           const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
           const isWork = selectedVaultId === 'work'
-          const preload = (window as any).cloudpass as any
+          const preload = window.cloudpass
           if (preload) {
-            const currentResult = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
               console.error('❌ vaultRead returned null - this should not happen with new API')
               return { error: { status: 500, data: 'Vault read failed' } }
@@ -156,13 +158,14 @@ export const vaultApi = createApi({
             if (current) {
               try {
                 parsed = isWork 
-                  ? (JSON.parse(current) as Record<string, VaultItem>)
-                  : decryptJson<Record<string, VaultItem>>(current, key)
-              } catch (decryptError: any) {
-                console.error('❌ Decryption failed in create operation:', decryptError.message)
+                  ? (JSON.parse(String(current)) as Record<string, VaultItem>)
+                  : decryptJson<Record<string, VaultItem>>(String(current), key)
+              } catch (decryptError: unknown) {
+                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
+                console.error('❌ Decryption failed in create operation:', msg)
                 // Try parsing as plain JSON
                 try {
-                  parsed = JSON.parse(current) as Record<string, VaultItem>
+                  parsed = JSON.parse(String(current)) as Record<string, VaultItem>
                 } catch {
                   parsed = {}
                 }
@@ -171,11 +174,12 @@ export const vaultApi = createApi({
             const newId = item.id && item.id.trim().length > 0 ? item.id : uuidv4()
             parsed[newId] = { ...item, id: newId }
             const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
-            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
+            await preload.vaultWrite({ region: regionOverride || region, name, secretString: enc, profile: profileOverride || profile, mode: 'replace' })
           }
           return { data: undefined }
-        } catch (e: any) {
-          return { error: { error: e.message } as any }
+        } catch (e: unknown) {
+          const msg = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
+          return { error: { status: 500, data: { error: msg } } }
         }
       },
       invalidatesTags: [{ type: 'Vault', id: 'LIST' }],
@@ -186,12 +190,12 @@ export const vaultApi = createApi({
         try {
           const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
           if (storageMode === 'local') {
-            const preload = (window as any).cloudpass as any
+            const preload = window.cloudpass
             const localKey = `localVault:${selectedVaultId}`
-            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            const currentEnc = preload ? await preload.storeGet<string>(localKey) : undefined
             let parsed: Record<string, VaultItem> = {}
             if (currentEnc) {
-              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(String(currentEnc)) } catch { parsed = {} } }
             }
             parsed[item.id] = { ...parsed[item.id], ...item }
             const enc = encryptJson(parsed, key)
@@ -205,9 +209,9 @@ export const vaultApi = createApi({
 
           const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
           const isWork = selectedVaultId === 'work'
-          const preload = (window as any).cloudpass as any
+          const preload = window.cloudpass
           if (preload) {
-            const currentResult = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
               console.error('❌ vaultRead returned null - this should not happen with new API')
               return { error: { status: 500, data: 'Vault read failed' } }
@@ -226,13 +230,14 @@ export const vaultApi = createApi({
             if (current) {
               try {
                 parsed = isWork 
-                  ? (JSON.parse(current) as Record<string, VaultItem>)
-                  : decryptJson<Record<string, VaultItem>>(current, key)
-              } catch (decryptError: any) {
-                console.error('❌ Decryption failed in update operation:', decryptError.message)
+                  ? (JSON.parse(String(current)) as Record<string, VaultItem>)
+                  : decryptJson<Record<string, VaultItem>>(String(current), key)
+              } catch (decryptError: unknown) {
+                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
+                console.error('❌ Decryption failed in update operation:', msg)
                 // Try parsing as plain JSON
                 try {
-                  parsed = JSON.parse(current) as Record<string, VaultItem>
+                  parsed = JSON.parse(String(current)) as Record<string, VaultItem>
                 } catch {
                   parsed = {}
                 }
@@ -240,11 +245,12 @@ export const vaultApi = createApi({
             }
             parsed[item.id] = { ...parsed[item.id], ...item }
             const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
-            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
+            await preload.vaultWrite({ region: regionOverride || region, name, secretString: enc, profile: profileOverride || profile, mode: 'replace' })
           }
           return { data: undefined }
-        } catch (e: any) {
-          return { error: { error: e.message } as any }
+        } catch (e: unknown) {
+          const msg = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
+          return { error: { status: 500, data: { error: msg } } }
         }
       },
       // Invalidate both the specific item and the LIST to ensure list query refreshes
@@ -256,12 +262,12 @@ export const vaultApi = createApi({
         try {
           const storageMode = (typeof localStorage !== 'undefined' && (localStorage.getItem('storageMode') as 'cloud' | 'local' | null)) || undefined
           if (storageMode === 'local') {
-            const preload = (window as any).cloudpass as any
+            const preload = window.cloudpass
             const localKey = `localVault:${selectedVaultId}`
-            const currentEnc = preload ? await preload.storeGet(localKey) : undefined
+            const currentEnc = preload ? await preload.storeGet<string>(localKey) : undefined
             let parsed: Record<string, VaultItem> = {}
             if (currentEnc) {
-              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(currentEnc) } catch { parsed = {} } }
+              try { parsed = decryptJson<Record<string, VaultItem>>(currentEnc, key) } catch { try { parsed = JSON.parse(String(currentEnc)) } catch { parsed = {} } }
             }
             delete parsed[id]
             const enc = encryptJson(parsed, key)
@@ -272,11 +278,11 @@ export const vaultApi = createApi({
             throw new Error('Missing AWS context')
           }
           const { region, profile } = resolveVaultContext({ uid, selectedVaultId, regionOverride, accountIdOverride })
-          const preload = (window as any).cloudpass as any
+          const preload = window.cloudpass
           if (preload) {
             const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, regionOverride, accountIdOverride })
             const isWork = selectedVaultId === 'work'
-            const currentResult = await preload.vaultRead(regionOverride || region, name, profileOverride || profile)
+            const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
               console.error('❌ vaultRead returned null - this should not happen with new API')
               return { error: { status: 500, data: 'Vault read failed' } }
@@ -295,13 +301,14 @@ export const vaultApi = createApi({
             if (current) {
               try {
                 parsed = isWork 
-                  ? (JSON.parse(current) as Record<string, VaultItem>)
-                  : decryptJson<Record<string, VaultItem>>(current, key)
-              } catch (decryptError: any) {
-                console.error('❌ Decryption failed in remove operation:', decryptError.message)
+                  ? (JSON.parse(String(current)) as Record<string, VaultItem>)
+                  : decryptJson<Record<string, VaultItem>>(String(current), key)
+              } catch (decryptError: unknown) {
+                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
+                console.error('❌ Decryption failed in remove operation:', msg)
                 // Try parsing as plain JSON
                 try {
-                  parsed = JSON.parse(current) as Record<string, VaultItem>
+                  parsed = JSON.parse(String(current)) as Record<string, VaultItem>
                 } catch {
                   parsed = {}
                 }
@@ -309,11 +316,12 @@ export const vaultApi = createApi({
             }
             delete parsed[id]
             const enc = isWork ? JSON.stringify(parsed) : encryptJson(parsed, key)
-            await preload.vaultWrite(regionOverride || region, name, enc, profileOverride || profile)
+            await preload.vaultWrite({ region: regionOverride || region, name, secretString: enc, profile: profileOverride || profile, mode: 'replace' })
           }
           return { data: undefined }
-        } catch (e: any) {
-          return { error: { error: e.message } as any }
+        } catch (e: unknown) {
+          const msg = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
+          return { error: { status: 500, data: { error: msg } } }
         }
       },
       invalidatesTags: [{ type: 'Vault', id: 'LIST' }],

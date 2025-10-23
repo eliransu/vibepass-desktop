@@ -63,17 +63,17 @@ export function PasswordDetails(props: PasswordDetailsProps): React.JSX.Element 
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-6">
         <div className="max-w-2xl space-y-6">
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
-            <div className="h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm">{p.title}</div>
+            <div className="h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start text-sm break-all whitespace-pre-wrap">{p.title}</div>
           </div>
           {p.username && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">{t('fields.username')}</label>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm min-w-0">{p.username}</div>
+                <div className="flex-1 h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start text-sm min-w-0 break-all whitespace-pre-wrap">{p.username}</div>
                 <button
                   className="h-10 px-3 bg-muted hover:bg-muted/80 rounded-lg text-sm flex-shrink-0 whitespace-nowrap"
                   onClick={() => copyWithFeedback(p.username || '', t('clipboard.usernameCopied'), () => {})}
@@ -87,7 +87,7 @@ export function PasswordDetails(props: PasswordDetailsProps): React.JSX.Element 
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">{t('fields.password')}</label>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center font-mono text-sm min-w-0">
+              <div className="flex-1 h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start font-mono text-sm min-w-0 break-all whitespace-pre-wrap">
                 {otpMeta ? (
                   <span className="flex items-center gap-2">
                     <span>{showPassword ? detailOtpCode : '••••••'}</span>
@@ -118,7 +118,7 @@ export function PasswordDetails(props: PasswordDetailsProps): React.JSX.Element 
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">{t('fields.url')}</label>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm truncate min-w-0">{p.url}</div>
+                <div className="flex-1 h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start text-sm min-w-0 break-all whitespace-pre-wrap">{p.url}</div>
                 <button
                   className="h-10 px-3 bg-muted hover:bg-muted/80 rounded-lg text-sm flex-shrink-0 whitespace-nowrap"
                   onClick={() => window.open(p.url!, '_blank')}
@@ -132,7 +132,7 @@ export function PasswordDetails(props: PasswordDetailsProps): React.JSX.Element 
           {p.notes && !(typeof p.notes === 'string' && p.notes.startsWith('otp:')) && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">{t('fields.notes')}</label>
-              <div className="w-full px-3 py-2 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap leading-relaxed">{p.notes}</div>
+              <div className="w-full px-3 py-2 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap break-all leading-relaxed">{p.notes}</div>
             </div>
           )}
         </div>

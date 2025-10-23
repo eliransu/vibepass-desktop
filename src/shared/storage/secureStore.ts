@@ -13,7 +13,8 @@ const schema: Record<keyof Schema, unknown> = {
 export const secureStore = new Store<Schema>({
   name: 'cloudpass',
   encryptionKey: undefined,
-  schema: schema as any,
+  // electron-store schema type is broad; cast keys individually
+  schema: schema as Record<string, unknown>,
 })
 
 

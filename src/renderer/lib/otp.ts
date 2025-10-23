@@ -83,7 +83,7 @@ export function parseOtpMetaFromItem(item: VaultItem | null): { secret: string; 
   try {
     if (typeof item.notes === 'string' && item.notes.startsWith('otp:')) {
       const parts = item.notes.replace(/^otp:/, '').split(';')
-      const map = Object.fromEntries(parts.map(kv => kv.split('='))) as any
+      const map = Object.fromEntries(parts.map(kv => kv.split('='))) as Record<string, string>
       const otpUrl = map.otpurl ? decodeURIComponent(map.otpurl) : ''
       if (otpUrl && otpUrl.toLowerCase().startsWith('otpauth://')) {
         const match = otpUrl.match(/[?&]secret=([^&]+)/i)

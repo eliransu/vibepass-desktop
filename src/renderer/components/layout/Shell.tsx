@@ -64,7 +64,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   }, [dispatch])
   
   return (
-    <div className="min-h-screen grid grid-rows-[auto_1fr] bg-background">
+    <div className="h-screen overflow-hidden grid grid-rows-[auto_1fr] bg-background">
       <div className="sticky top-0 z-50">
         <TopBar />
       </div>
@@ -212,7 +212,7 @@ function VaultsList({ storageMode }: { storageMode?: 'cloud' | 'local' }): React
   const navigate = useNavigate()
 
   const baseItems = useMemo(() => {
-    const items: Array<{ id: string; name: string; icon: string; color: string }> = [
+    const items: Array<{ id: 'personal' | 'work'; name: string; icon: 'user' | 'briefcase'; color: string }> = [
       { id: 'personal', name: t('vault.personal') as string, icon: 'user', color: 'bg-blue-500' },
     ]
     if (storageMode === 'cloud') {
@@ -220,13 +220,13 @@ function VaultsList({ storageMode }: { storageMode?: 'cloud' | 'local' }): React
       const workName = (department && department.trim().length > 0) ? department : (t('vault.work') as string)
       items.push({ id: 'work', name: workName, icon: 'briefcase', color: 'bg-purple-500' })
     }
-    return items as any[]
+    return items
   }, [t, storageMode])
 
 
   return (
     <div className="space-y-1">
-      {baseItems.map((vault: any) => (
+      {baseItems.map((vault) => (
         <button 
           key={vault.id} 
           onClick={() => {
@@ -253,9 +253,6 @@ function VaultsList({ storageMode }: { storageMode?: 'cloud' | 'local' }): React
             )}
             {vault.icon === 'briefcase' && (
               <Icon name="briefcase" size={12} className="text-white" />
-            )}
-            {vault.icon === 'users' && (
-              <Icon name="users" size={12} className="text-white" />
             )}
             {!vault.icon && (
               <Icon name="lock" size={12} className="text-white" />

@@ -1,0 +1,74 @@
+name: Release macOS on merge to main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    # Avoid running on version-bump commits that include [skip ci]
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: macos-latest
+    env:
+      CI: true
+      # Required for code signing and notarization
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Developer ID Application certificate (base64 .p12) and password
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      # Optional: specify identity name explicitly if needed
+      CSC_NAME: ${{ secrets.CSC_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version (patch)
+        id: bump
+        run: |
+          NEW_VERSION=$(npm version patch -m "chore: release v%s [skip ci]")
+          echo "new_version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Build, sign, and notarize mac artifacts
+        run: npm run release:mac
+
+      - name: Resolve app version
+        id: ver
+        run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudpass-mac-${{ env.APP_VERSION }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Push version bump commit and tag
+        run: |
+          # Push both commit and the tag created by npm version
+          git push --follow-tags origin HEAD:main

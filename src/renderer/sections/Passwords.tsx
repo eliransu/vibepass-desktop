@@ -21,7 +21,7 @@ import { generateTotp, parseOtpMetaFromItem } from '../lib/otp'
 import { mergeKnownTags, dedupeTags } from '../lib/tags'
 
 function Content(): React.JSX.Element {
-  const location = useLocation() as any
+  const location = useLocation()
   const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const { t } = useTranslation()
   const { showToast } = useSafeToast()
@@ -82,7 +82,7 @@ function Content(): React.JSX.Element {
           return
         }
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, selectedItem.ssmArn, profile)
+        const secret = await window.cloudpass?.teamGetSecretValue?.({ region: awsRegion || region, secretId: selectedItem.ssmArn, profile })
         if (cancelled) return
         if (secret) {
           try {
@@ -114,13 +114,13 @@ function Content(): React.JSX.Element {
         if (selectedItem) return
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
-        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        const res = await window.cloudpass?.vaultRead?.({ region: String(awsRegion || region), name: String(name), profile })
         if (cancelled) return
         if (!res || res.success !== true) return
-        const secret = res.data
+        const secret = res.data ?? ''
         let parsed: Record<string, VaultItem> = {}
         try {
-          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key || '')
         } catch {
           try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
         }
@@ -156,7 +156,7 @@ function Content(): React.JSX.Element {
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingPassword, setEditingPassword] = useState<VaultItem | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, item: VaultItem | null}>({isOpen: false, item: null})
+  const [deleteConfirm, setDeleteConfirm] = useState<{isOpen: boolean, item: VaultItem | null, vaultId: string | null}>({isOpen: false, item: null, vaultId: null})
   const [formData, setFormData] = useState<PasswordFormData>({ title: '', username: '', password: '', url: '', notes: '', tags: [] })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -176,13 +176,14 @@ function Content(): React.JSX.Element {
   // OTP helpers moved to lib/otp
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
-    try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+    try { void window.cloudpass?.storeSet?.('awsAccountId', '') } catch {}
     try { dispatch(setAwsAccountId('')) } catch {}
   }, [dispatch])
 
   useEffect(() => {
     if (!error) return
-    const msg = String((error as any)?.error ?? (error as any)?.data?.error ?? (error as any)?.message ?? '')
+    const anyErr = error as unknown as { error?: string; data?: { error?: string }; message?: string }
+    const msg = String(anyErr?.error ?? anyErr?.data?.error ?? anyErr?.message ?? '')
     if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
       clearAwsAccountContext()
     }
@@ -208,21 +209,21 @@ function Content(): React.JSX.Element {
     const onUp = () => {
       setIsResizing(false)
       localStorage.setItem('listPaneWidth', String(listWidth))
-      if ((window as any).cloudpass?.storeSet) {
-        void (window as any).cloudpass.storeSet('listPaneWidth', String(listWidth))
+      if (window.cloudpass?.storeSet) {
+        void window.cloudpass.storeSet('listPaneWidth', String(listWidth))
       }
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     document.body.style.cursor = 'col-resize'
-    ;(document.body.style as any).userSelect = 'none'
+    ;(document.body.style as unknown as { userSelect?: string }).userSelect = 'none'
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
   }, [isResizing, listWidth])
 
@@ -257,7 +258,7 @@ function Content(): React.JSX.Element {
       const { secret, digits, algorithm, step } = detailOtpConfigRef.current
       const algLower = (algorithm || 'SHA1').toLowerCase()
       try {
-        const codeNow = generateTotp(secret, { digits, algorithm: algLower as any, step, epoch: Date.now() })
+        const codeNow = generateTotp(secret, { digits, algorithm: algLower, step, epoch: Date.now() })
         setDetailOtpCode(codeNow)
         const epoch = Math.floor(Date.now() / 1000)
         let left = step - (epoch % step)
@@ -287,7 +288,8 @@ function Content(): React.JSX.Element {
       const tryDecode = (canvas: HTMLCanvasElement): string | null => {
         const ctx = canvas.getContext('2d')!
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const res = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' as any })
+        const inversionAttempts: 'dontInvert' | 'onlyInvert' | 'attemptBoth' | 'invertFirst' = 'attemptBoth'
+        const res = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts })
         return res?.data || null
       }
       const scales = [1, 1.5, 2, 0.75]
@@ -349,7 +351,7 @@ function Content(): React.JSX.Element {
           const { secret, digits, algorithm, step } = otpConfigRef.current
           const algLower = (algorithm || 'SHA1').toLowerCase()
           try {
-            const codeNow = generateTotp(secret, { digits, algorithm: algLower as any, step, epoch: Date.now() })
+            const codeNow = generateTotp(secret, { digits, algorithm: algLower, step, epoch: Date.now() })
             setCurrentOtpCode(codeNow)
             const epoch = Math.floor(Date.now() / 1000)
             let left = step - (epoch % step)
@@ -428,18 +430,19 @@ function Content(): React.JSX.Element {
   }
 
   function handleDeleteClick(item: VaultItem) {
-    setDeleteConfirm({isOpen: true, item})
+    setDeleteConfirm({isOpen: true, item, vaultId: selectedVaultId || null})
   }
 
   async function handleDeleteConfirm() {
+    console.log({deleteConfirm,uid,key})
     if (deleteConfirm.item && uid && key) {
       try {
         setIsDeleting(true)
         {
-          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId })
+          const pr: any = removeItem({ uid, key, id: deleteConfirm.item.id, selectedVaultId: deleteConfirm.vaultId || selectedVaultId, regionOverride: awsRegion, accountIdOverride: awsAccountId })
           await (pr?.unwrap ? pr.unwrap() : pr)
         }
-        setDeleteConfirm({isOpen: false, item: null})
+        setDeleteConfirm({isOpen: false, item: null, vaultId: null})
         if (selectedId === deleteConfirm.item.id) {
           dispatch(setSelectedItemId(null))
         }
@@ -449,7 +452,7 @@ function Content(): React.JSX.Element {
           clearAwsAccountContext()
           showToast(t('team.ssoExpiredInline') as string, 'error')
         } else {
-          showToast(t('team.listFailed') as string, 'error')
+          showToast(t('team.deleteFailed') as string, 'error')
         }
       } finally {
         setIsDeleting(false)
@@ -478,7 +481,7 @@ function Content(): React.JSX.Element {
         className={`w-1 cursor-col-resize bg-transparent hover:bg-border active:bg-border`} 
       />
 
-      <div className="flex-1 bg-background min-w-0">
+      <div className="flex-1 bg-background min-h-0 min-w-0">
         {showCreateForm ? (
           <PasswordForm
             isSubmitting={isSubmitting}
@@ -489,7 +492,7 @@ function Content(): React.JSX.Element {
             onCancel={resetForm}
             onScanQr={async () => {
                           try {
-                            const dataUrl: string | null = await (window as any).cloudpass.cropScreen()
+                            const dataUrl: string | null = await window.cloudpass.cropScreen()
                             if (!dataUrl) return
                             await decodeFromDataUrl(dataUrl)
                           } catch {}
@@ -504,8 +507,8 @@ function Content(): React.JSX.Element {
           (() => {
             const base = passwords.find(x => x.id === selectedId) || null
             const p = (resolvedItem || base) ? ({
-              ...(base || {} as any),
-              ...(resolvedItem || {} as any),
+              ...(base || {}),
+              ...(resolvedItem || {}),
             } as VaultItem) : null
             if (!p) return (
               <div className="h-full flex items-center justify-center">
@@ -531,7 +534,7 @@ function Content(): React.JSX.Element {
                               return
                             }
                               const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-                const secret = await (window as any).cloudpass.teamGetSecretValue(awsRegion || region, p.ssmArn, profile)
+                const secret = await window.cloudpass.teamGetSecretValue({ region: awsRegion || region, secretId: p.ssmArn, profile })
                               if (secret) {
                                 const decrypted = decryptJson<VaultItem>(secret, key ?? '')
                                 const value = decrypted.password || ''
@@ -580,7 +583,7 @@ function Content(): React.JSX.Element {
 
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({ isOpen: false, item: null })}
+        onClose={() => setDeleteConfirm({ isOpen: false, item: null, vaultId: null })}
         onConfirm={handleDeleteConfirm}
         title={t('actions.confirmDelete')}
         message={t('actions.deleteMessage', { name: deleteConfirm.item?.title })}

@@ -27,7 +27,17 @@ export function TopBar(): React.JSX.Element {
   const dispatch = useDispatch()
   const { showToast } = useSafeToast()
   const [showProfileError, setShowProfileError] = useState(false)
-  const [config, setConfig] = useState<any | null>(null)
+  const [config, setConfig] = useState<{
+    region?: string
+    cloudAccountId?: string
+    team?: string
+    department?: string
+    loginUrl?: string
+    roleName?: string
+    accessKeyId?: string
+    secretAccessKey?: string
+    sessionToken?: string
+  } | null>(null)
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
   const [configText, setConfigText] = useState('')
   const [configError, setConfigError] = useState<string | null>(null)
@@ -50,7 +60,7 @@ export function TopBar(): React.JSX.Element {
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [])
 
-  const persistFromConfig = useCallback(async (cfg: any | null) => {
+  const persistFromConfig = useCallback(async (cfg: typeof config) => {
     if (!cfg) return
     const region = cfg?.region
     const accountId = cfg?.cloudAccountId
@@ -101,39 +111,40 @@ export function TopBar(): React.JSX.Element {
   }, [user?.uid, config, persistFromConfig])
 
   // Simple JSON validation function to replace Zod
-  function validateConfig(parsed: any): { isValid: boolean; error?: string } {
-    if (!parsed || typeof parsed !== 'object') {
+  function validateConfig(parsed: unknown): { isValid: boolean; error?: string } {
+    const p = parsed as Record<string, unknown>
+    if (!p || typeof p !== 'object') {
       return { isValid: false, error: 'Configuration must be an object' }
     }
 
     // department not required anymore
 
     // Check if it's SSO configuration (has loginUrl) or keys configuration
-    const hasSSO = parsed.loginUrl || parsed.cloudAccountId || parsed.roleName
-    const hasKeys = parsed.accessKeyId || parsed.secretAccessKey
+    const hasSSO = Boolean((p as Record<string, unknown>).loginUrl || (p as Record<string, unknown>).cloudAccountId || (p as Record<string, unknown>).roleName)
+    const hasKeys = Boolean((p as Record<string, unknown>).accessKeyId || (p as Record<string, unknown>).secretAccessKey)
 
     if (hasSSO) {
-      if (!parsed.loginUrl || typeof parsed.loginUrl !== 'string') {
+      if (!p.loginUrl || typeof p.loginUrl !== 'string') {
         return { isValid: false, error: 'loginUrl is required for SSO configuration' }
       }
-      if (!parsed.cloudAccountId || typeof parsed.cloudAccountId !== 'string') {
+      if (!p.cloudAccountId || typeof p.cloudAccountId !== 'string') {
         return { isValid: false, error: 'cloudAccountId is required for SSO configuration' }
       }
-      if (!parsed.roleName || typeof parsed.roleName !== 'string') {
+      if (!p.roleName || typeof p.roleName !== 'string') {
         return { isValid: false, error: 'roleName is required for SSO configuration' }
       }
       try {
-        new URL(parsed.loginUrl)
+        new URL(String(p.loginUrl))
       } catch {
         return { isValid: false, error: 'loginUrl must be a valid URL' }
       }
     }
 
     if (hasKeys) {
-      if (!parsed.accessKeyId || typeof parsed.accessKeyId !== 'string') {
+      if (!('accessKeyId' in p) || typeof (p as Record<string, unknown>).accessKeyId !== 'string') {
         return { isValid: false, error: 'accessKeyId is required for keys configuration' }
       }
-      if (!parsed.secretAccessKey || typeof parsed.secretAccessKey !== 'string') {
+      if (!('secretAccessKey' in p) || typeof (p as Record<string, unknown>).secretAccessKey !== 'string') {
         return { isValid: false, error: 'secretAccessKey is required for keys configuration' }
       }
     }
@@ -145,7 +156,7 @@ export function TopBar(): React.JSX.Element {
     return { isValid: true }
   }
 
-  function normalizeRawConfig(raw: any): any {
+  function normalizeRawConfig(raw: unknown): Record<string, unknown> {
     const get = (obj: any, candidates: string[]): any => {
       for (const key of candidates) {
         if (obj && Object.prototype.hasOwnProperty.call(obj, key)) return obj[key]
@@ -184,7 +195,7 @@ export function TopBar(): React.JSX.Element {
     }
   }
 
-  async function openConfigModal(prefill?: any | null): Promise<void> {
+  async function openConfigModal(prefill?: typeof config): Promise<void> {
     try {
       setConfigError(null)
       const latest = await window.cloudpass.configGet()
@@ -273,8 +284,8 @@ export function TopBar(): React.JSX.Element {
                 localStorage.removeItem('tenant')
                 localStorage.removeItem('department')
               } catch {}
-              try { await (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
-              try { await (window as any).cloudpass?.storeSet?.('awsProfile', '') } catch {}
+              try { await window.cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+              try { await window.cloudpass?.storeSet?.('awsProfile', '') } catch {}
               try { dispatch(setAwsAccountId(undefined)) } catch {}
             }
             // Route to passwords (initial screen)
@@ -318,11 +329,11 @@ export function TopBar(): React.JSX.Element {
               if (res?.ok) {
                 // After successful SSO, refresh identity and data without full app reload
                 try {
-                  const preload = (window as any).cloudpass as any
+                  const preload = window.cloudpass
                   if (preload && typeof preload.getAwsUserIdentity === 'function') {
-                    const identity = await preload.getAwsUserIdentity() as { ok: true; userId: string } | { ok: false; error: string; code?: string }
-                    if ((identity as any)?.ok === true) {
-                      const username = String((identity as any).userId || '').trim()
+                    const identity = await preload.getAwsUserIdentity()
+                    if (identity?.ok === true) {
+                      const username = String(identity.userId || '').trim()
                       if (username.length > 0) {
                         dispatch(setUser({ uid: username, email: `${username}@cloudpass.aws`, displayName: username, photoURL: '' }))
                         dispatch(setSsoRequired(false))

@@ -39,8 +39,7 @@ function createMainWindow(): void {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
     mainWindow.loadURL('http://localhost:3000')
   } else {
-    // Serve renderer over http://127.0.0.1 to satisfy OAuth requirements (no file://)
-    // Use a fixed port so the origin stays stable across restarts and auth/session persists
+    // Serve renderer over http://127.0.0.1 (no file://) with a fixed port for stable origin
     const FIXED_PORT = Number(process.env.CLOUDPASS_PORT || process.env.ENESECRETS_PORT || process.env.VIBEPASS_PORT || 17896)
     const rendererDir = path.join(__dirname, '../renderer')
     const server = http.createServer((req, res) => {
@@ -68,7 +67,7 @@ function createMainWindow(): void {
             })
             return
           }
-          // Basic content-type mapping
+          // Content-type mapping
           const ext = path.extname(filePath).toLowerCase()
           const type = ext === '.html' ? 'text/html; charset=UTF-8'
             : ext === '.js' ? 'application/javascript'
@@ -88,13 +87,13 @@ function createMainWindow(): void {
         res.end('Server error')
       }
     })
-    // Prefer a fixed port; if taken, attempt next few ports deterministically
+    // Prefer fixed port; try a few next ports if needed
     const tryListen = (port: number, attemptsLeft: number): void => {
       server.once('error', (err: any) => {
         if ((err?.code === 'EADDRINUSE' || err?.code === 'EACCES') && attemptsLeft > 0) {
           tryListen(port + 1, attemptsLeft - 1)
         } else {
-          // Fallback to file protocol if server failed
+          // Fallback to file protocol
           mainWindow?.loadFile(path.join(rendererDir, 'index.html'))
         }
       })
@@ -108,8 +107,6 @@ function createMainWindow(): void {
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
   mainWindow.on('closed', () => (mainWindow = null))
-
-  // Auto-lock disabled per user request
 
   // Security: open all external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -137,8 +134,8 @@ app.on('activate', () => {
 })
 
 // Secure IPC for keytar
-ipcMain.handle('secure:keytar-set', async (_evt, service: string, account: string, secret: string) => {
-  await keytar.setPassword(service, account, secret)
+ipcMain.handle('secure:keytar-set', async (_evt, input: { service: string; account: string; secret: string }) => {
+  await keytar.setPassword(input.service, input.account, input.secret)
   return true
 })
 
@@ -150,6 +147,10 @@ ipcMain.handle('secure:keytar-get', async (_evt, service: string, account: strin
 // Biometric authentication
 ipcMain.handle('secure:biometric-check', async () => {
   try {
+    // Disable prompts in development
+    if (process.env.NODE_ENV === 'development') {
+      return false 
+    }
     const current = await keytar.getPassword('cloudpass-Biometric', 'master-password')
     const legacy = await keytar.getPassword('VibePass-Biometric', 'master-password')
     const hasSecret = Boolean(current || legacy)
@@ -166,6 +167,10 @@ ipcMain.handle('secure:biometric-check', async () => {
 
 ipcMain.handle('secure:biometric-store', async (_evt, masterPassword: string) => {
   try {
+    // Skip storing in development
+    if (process.env.NODE_ENV === 'development') {
+      return false
+    }
     // Store master password with biometric protection
     await keytar.setPassword('cloudpass-Biometric', 'master-password', masterPassword)
     // Backward-compatibility: also write legacy key name
@@ -178,8 +183,12 @@ ipcMain.handle('secure:biometric-store', async (_evt, masterPassword: string) =>
 
 ipcMain.handle('secure:biometric-retrieve', async () => {
   try {
+    // Do not prompt/return secrets in development
+    if (process.env.NODE_ENV === 'development') {
+      return null
+    }
     if (process.platform === 'darwin') {
-      // This will show the Touch ID prompt. It throws if cancelled or unavailable.
+      // Show Touch ID prompt (throws if cancelled)
       if (typeof systemPreferences.promptTouchID === 'function') {
         await systemPreferences.promptTouchID('Unlock CloudPass')
       }
@@ -200,7 +209,7 @@ ipcMain.handle('store:get', async (_evt, key: string) => {
 })
 
 ipcMain.handle('store:set', async (_evt, key: string, value: unknown) => {
-  store.set(key, value as any)
+  store.set(key, value)
   return true
 })
 
@@ -212,38 +221,46 @@ ipcMain.handle('config:get', async () => {
 
 ipcMain.handle('config:set', async (_evt, cfg: CloudPassConfig | null) => {
   if (cfg) {
-    store.set('cloudpassConfig', cfg as any)
+    store.set('cloudpassConfig', cfg)
   } else {
     store.delete('cloudpassConfig')
   }
   return true
 })
 
-// AWS Secrets Manager via IPC - keep only endpoints used by renderer
+// AWS Secrets Manager via IPC
 
 // Get a secret value by ARN/id
-ipcMain.handle('team:get-secret-value', async (_evt, region: string, secretId: string, _profile?: string) => {
+ipcMain.handle('team:get-secret-value', async (_evt, input: { region: string; secretId: string; profile?: string }) => {
+  const { region, secretId } = input
   const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const sess = (store.get('cloudpassSessionCreds') as { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string; expiration?: number } | null) || null
   const now = Date.now()
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const effectiveAuth: CloudPassConfig | null = hasSess
+    ? { accessKeyId: String(sess.accessKeyId || ''), secretAccessKey: String(sess.secretAccessKey || ''), sessionToken: sess.sessionToken ? String(sess.sessionToken) : undefined }
+    : cfg ?? null
   const client = createSecretsClient(region, effectiveAuth)
   return (await getSecret(client, secretId)) ?? null
 })
 
 // Consolidated vault secret read/write by name
-ipcMain.handle('vault:read', async (_evt, region: string, name: string, _profile?: string) => {
+ipcMain.handle('vault:read', async (_evt, input: { region: string; name: string; profile?: string }) => {
+  const { region, name } = input
   const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const sess = (store.get('cloudpassSessionCreds') as { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string; expiration?: number } | null) || null
   const now = Date.now()
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const effectiveAuth: CloudPassConfig | null = hasSess
+    ? { accessKeyId: String(sess.accessKeyId || ''), secretAccessKey: String(sess.secretAccessKey || ''), sessionToken: sess.sessionToken ? String(sess.sessionToken) : undefined }
+    : cfg ?? null
   const client = createSecretsClient(region, effectiveAuth)
   try {
+    // console.log({name,region,effectiveAuth,client,cfg,sess})
     const result = await getSecret(client, name)
     return { success: true, data: result ?? null }
   } catch (e: any) {
+    console.log({name})
     console.error('vault:read error:', name, 'Error details:', JSON.stringify({
       name: e.name,
       __type: e.__type,
@@ -264,14 +281,17 @@ ipcMain.handle('vault:read', async (_evt, region: string, name: string, _profile
   }
 })
 
-ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretString: string, _profile?: string) => {
+ipcMain.handle('vault:write', async (_evt, input: { region: string; name: string; secretString: string; profile?: string; mode?: 'replace' | 'merge' }) => {
+  const { region, name, secretString, mode } = input
   const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-  const sess = (store.get('cloudpassSessionCreds') as any) || null
+  const sess = (store.get('cloudpassSessionCreds') as { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string; expiration?: number } | null) || null
   const now = Date.now()
   const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
-  const effectiveAuth = hasSess ? ({ type: 'keys', accessKeyId: sess.accessKeyId, secretAccessKey: sess.secretAccessKey, sessionToken: sess.sessionToken } as any) : cfg
+  const effectiveAuth: CloudPassConfig | null = hasSess
+    ? { accessKeyId: String(sess.accessKeyId || ''), secretAccessKey: String(sess.secretAccessKey || ''), sessionToken: sess.sessionToken ? String(sess.sessionToken) : undefined }
+    : cfg ?? null
   const client = createSecretsClient(region, effectiveAuth)
-  // Derive tags per IAM policy (App already applied in createSecret): Department for work, Scope and Owner for personal
+  // Derive tags per IAM policy
   const parts = String(name || '').split('/')
   let scope: 'personal' | 'work' | undefined
   let owner: string | undefined
@@ -287,10 +307,10 @@ ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretS
       const stsRegion = cfg?.region || 'us-east-1'
       const stsClient = new STSClient({
         region: stsRegion,
-        credentials: effectiveAuth && (effectiveAuth as any).accessKeyId && (effectiveAuth as any).secretAccessKey ? {
-          accessKeyId: String((effectiveAuth as any).accessKeyId),
-          secretAccessKey: String((effectiveAuth as any).secretAccessKey),
-          sessionToken: (effectiveAuth as any).sessionToken ? String((effectiveAuth as any).sessionToken) : undefined,
+        credentials: effectiveAuth && effectiveAuth.accessKeyId && effectiveAuth.secretAccessKey ? {
+          accessKeyId: String(effectiveAuth.accessKeyId),
+          secretAccessKey: String(effectiveAuth.secretAccessKey),
+          sessionToken: effectiveAuth.sessionToken ? String(effectiveAuth.sessionToken) : undefined,
         } : undefined,
       })
       const idRes = await stsClient.send(new GetCallerIdentityCommand({}))
@@ -307,18 +327,22 @@ ipcMain.handle('vault:write', async (_evt, region: string, name: string, secretS
   }
 
   if (scope === 'work') {
-    // For team (non-encrypted) vaults, do server-side read-merge-write to reduce lost updates
-    await upsertJsonMergedSecret(client, name, secretString, { department, scope, owner })
+    // Team vaults: allow explicit replace when the caller provides full state
+    if (mode === 'replace') {
+      await putSecret(client, { secretId: name, secretString })
+    } else {
+      await upsertJsonMergedSecret(client, { name, incomingSecretString: secretString, tags: { department, scope, owner } })
+    }
   } else {
-    // Personal vaults remain encrypted end-to-end; server should not merge
+    // Personal vaults: end-to-end encrypted, no merge
     try {
-      await createSecret(client, name, secretString, { department, scope, owner })
+      await createSecret(client, { name, secretString, tags: { department, scope, owner } })
     } catch (e: any) {
       const code = e?.name || e?.code || ''
       const msg = e?.message || ''
       const alreadyExists = code === 'ResourceExistsException' || /already ?exists|exists/i.test(msg)
       if (!alreadyExists) throw e
-      await putSecret(client, name, secretString)
+      await putSecret(client, { secretId: name, secretString })
     }
   }
   return true
@@ -393,7 +417,7 @@ ipcMain.handle('aws:sso-login', async () => {
       accountId: cfg.cloudAccountId,
       roleName: cfg.roleName,
       obtainedAt: Date.now(),
-    } as any)
+    })
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message || 'SSO failed' }
@@ -405,7 +429,7 @@ ipcMain.handle('aws:sso-login', async () => {
 ipcMain.handle('aws:get-user-identity', async () => {
   try {
     const cfg = (store.get('cloudpassConfig') as CloudPassConfig | undefined) ?? null
-    const sess = (store.get('cloudpassSessionCreds') as any) || null
+    const sess = (store.get('cloudpassSessionCreds') as { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string; expiration?: number } | null) || null
     const now = Date.now()
     const hasSess = sess && typeof sess.expiration === 'number' && now < Number(sess.expiration)
     
@@ -418,12 +442,11 @@ ipcMain.handle('aws:get-user-identity', async () => {
       return { ok: false, error: 'SSO session required', code: 'SessionRequired' }
     }
 
-    const effectiveAuth = hasSess ? ({
-      type: 'keys',
-      accessKeyId: sess.accessKeyId,
-      secretAccessKey: sess.secretAccessKey,
-      sessionToken: sess.sessionToken
-    } as any) : cfg
+    const effectiveAuth: CloudPassConfig | null = hasSess ? {
+      accessKeyId: String(sess.accessKeyId || ''),
+      secretAccessKey: String(sess.secretAccessKey || ''),
+      sessionToken: sess.sessionToken ? String(sess.sessionToken) : undefined,
+    } : cfg ?? null
     
     // Use the same region as configured, fallback to us-east-1 for STS
     const region = cfg?.region || 'us-east-1'

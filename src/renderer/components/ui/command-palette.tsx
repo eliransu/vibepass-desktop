@@ -140,7 +140,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps): React.JSX.Elem
           <div className="p-3 border-b border-border relative">
             <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              ref={inputRef as any}
+              ref={inputRef}
               placeholder={"Search all categories: name, user, url, notes or #tag"}
               value={q}
               onChange={(e) => setQ(e.target.value)}

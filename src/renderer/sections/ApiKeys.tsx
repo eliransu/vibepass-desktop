@@ -16,7 +16,7 @@ import { copyWithFeedback } from '../lib/clipboard'
 import { useSafeToast } from '../hooks/useSafeToast'
 
 function Content(): React.JSX.Element {
-  const location = useLocation() as any
+  const location = useLocation()
   const routePreloaded: VaultItem | null = (location?.state?.preloadedItem as VaultItem) || null
   const { t } = useTranslation()
   const { showToast } = useSafeToast()
@@ -77,7 +77,7 @@ function Content(): React.JSX.Element {
           return
         }
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-        const secret = await (window as any).cloudpass?.teamGetSecretValue?.(awsRegion || region, base.ssmArn, profile)
+        const secret = await window.cloudpass?.teamGetSecretValue?.({ region: awsRegion || region, secretId: base.ssmArn, profile })
         if (cancelled) return
         if (secret) {
           try {
@@ -107,13 +107,13 @@ function Content(): React.JSX.Element {
         if (items.find(x => x.id === selectedId)) return
         const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
         const name = getVaultSecretNameWithOverrides({ uid, selectedVaultId, email, regionOverride: awsRegion, accountIdOverride: awsAccountId })
-        const res = await (window as any).cloudpass?.vaultRead?.(awsRegion || region, name, profile)
+        const res = await window.cloudpass?.vaultRead?.({ region: String(awsRegion || region), name: String(name), profile })
         if (cancelled) return
         if (!res || res.success !== true) return
-        const secret = res.data
+        const secret = res.data ?? ''
         let parsed: Record<string, VaultItem> = {}
         try {
-          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key)
+          parsed = selectedVaultId === 'work' ? (JSON.parse(secret) as Record<string, VaultItem>) : decryptJson<Record<string, VaultItem>>(secret, key || '')
         } catch {
           try { parsed = JSON.parse(secret) as Record<string, VaultItem> } catch { parsed = {} }
         }
@@ -150,13 +150,14 @@ function Content(): React.JSX.Element {
 
   const clearAwsAccountContext = useCallback(() => {
     try { localStorage.removeItem('awsAccountId') } catch {}
-    try { void (window as any).cloudpass?.storeSet?.('awsAccountId', '') } catch {}
+    try { void window.cloudpass?.storeSet?.('awsAccountId', '') } catch {}
     try { dispatch(setAwsAccountId('')) } catch {}
   }, [dispatch])
 
   useEffect(() => {
     if (!error) return
-    const msg = String((error as any)?.error ?? (error as any)?.data?.error ?? (error as any)?.message ?? '')
+    const anyErr = error as unknown as { error?: string; data?: { error?: string }; message?: string }
+    const msg = String(anyErr?.error ?? anyErr?.data?.error ?? anyErr?.message ?? '')
     if (msg.toLowerCase().includes('token is expired') || msg.toLowerCase().includes('sso')) {
       clearAwsAccountContext()
     }
@@ -181,21 +182,21 @@ function Content(): React.JSX.Element {
     const onUp = () => {
       setIsResizing(false)
       localStorage.setItem('listPaneWidth', String(listWidth))
-      if ((window as any).cloudpass?.storeSet) {
-        void (window as any).cloudpass.storeSet('listPaneWidth', String(listWidth))
+      if (window.cloudpass?.storeSet) {
+        void window.cloudpass.storeSet('listPaneWidth', String(listWidth))
       }
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     document.body.style.cursor = 'col-resize'
-    ;(document.body.style as any).userSelect = 'none'
+    ;(document.body.style as unknown as { userSelect?: string }).userSelect = 'none'
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
-      ;(document.body.style as any).userSelect = ''
+      ;(document.body.style as unknown as { userSelect?: string }).userSelect = ''
     }
   }, [isResizing, listWidth])
 
@@ -372,7 +373,7 @@ function Content(): React.JSX.Element {
       />
 
       {/* Details panel */}
-      <div className="flex-1 bg-background min-w-0">
+      <div className="flex-1 bg-background min-h-0 min-w-0">
         {showCreateForm ? (
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-border">
@@ -489,18 +490,18 @@ function Content(): React.JSX.Element {
                 </div>
 
                 {/* Content (read-only form layout) */}
-                <div className="flex-1 overflow-auto p-6">
+                <div className="flex-1 min-h-0 overflow-auto p-6">
                   <div className="max-w-2xl space-y-6">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">{t('fields.title')}</label>
-                      <div className="h-10 px-3 bg-muted/50 rounded-lg flex items-center text-sm">{it.title}</div>
+                      <div className="h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start text-sm break-all whitespace-pre-wrap">{it.title}</div>
                     </div>
 
                     {(it.password || it.ssmArn) && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">{t('fields.secret')}</label>
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="flex-1 h-10 px-3 bg-muted/50 rounded-lg flex items-center font-mono text-sm min-w-0">{'•'.repeat(12)}</div>
+                          <div className="flex-1 h-auto min-h-10 px-3 py-2 bg-muted/50 rounded-lg flex items-start font-mono text-sm min-w-0 break-all whitespace-pre-wrap">{'•'.repeat(12)}</div>
                           <button 
                             className="h-10 px-3 bg-primary hover:bg-primary-hover rounded-lg text-sm text-primary-foreground flex-shrink-0 whitespace-nowrap"
                             onClick={async () => {
@@ -512,7 +513,7 @@ function Content(): React.JSX.Element {
                               try {
                                 const { resolveVaultContext } = await import('../services/vaultPaths')
                                 const { region, profile } = resolveVaultContext({ uid, selectedVaultId, email, regionOverride: awsRegion })
-                                const secret = await window.cloudpass.teamGetSecretValue(awsRegion || region, it.ssmArn, profile)
+                                const secret = await window.cloudpass.teamGetSecretValue({ region: awsRegion || region, secretId: it.ssmArn, profile })
                                 if (secret) {
                                   const decrypted = decryptJson<VaultItem>(secret, key ?? '')
                                   await copyWithFeedback(decrypted.password ?? '', t('clipboard.secretCopied') || t('clipboard.passwordCopied'), showToast)
@@ -532,7 +533,7 @@ function Content(): React.JSX.Element {
                     {it.notes && (
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-2">{t('fields.details')}</label>
-                        <div className="w-full px-3 py-2 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap leading-relaxed">{it.notes}</div>
+                        <div className="w-full px-3 py-2 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap break-all leading-relaxed">{it.notes}</div>
                       </div>
                     )}
                   </div>
