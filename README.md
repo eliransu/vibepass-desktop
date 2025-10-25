@@ -1,19 +1,21 @@
 ## cloudpass.dev
 
-Secure, modern, local‑first password manager with enterprise options. Built with Electron, React, and TypeScript.
+Secure, modern, local-first password manager with enterprise options. Built with Electron, React, and TypeScript.
 
 - React 19 • Electron 37 • TypeScript • TailwindCSS
 - Biometric unlock on macOS (Touch ID)
-- Local AES‑256 encryption with PBKDF2 (100k iterations)
-- Per‑vault consolidated storage via AWS Secrets Manager (encrypted blob)
+- System tray integration with global search (⌘⇧⌥P)
+- Quick access to secrets from menu bar without opening main app
+- Local AES-256 encryption with PBKDF2 (100k iterations)
+- Per-vault consolidated storage via AWS Secrets Manager (encrypted blob)
 - Lightweight metadata in Firebase Firestore (optional)
 - Multiple vaults: personal and work
 - macOS notarized builds (hardened runtime, entitlements)
 
 ### Why cloudpass.dev
 
-- Local‑first security: Only encrypted strings can leave your machine.
-- Enterprise‑ready: Uses your AWS profile/region and AWS Secrets Manager for shared or regulated environments.
+- Local-first security: Only encrypted strings can leave your machine.
+- Enterprise-ready: Uses your AWS profile/region and AWS Secrets Manager for shared or regulated environments.
 - Delightful UX: A focused, fast UI inspired by the best password managers.
 
 ### Look & Feel
@@ -98,33 +100,33 @@ AWS (optional, enables consolidated per‑vault storage)
 
 ### Security Model
 
-- Master key derivation: PBKDF2 with 100k iterations; AES‑256 for encryption
+- Master key derivation: PBKDF2 with 100k iterations; AES-256 for encryption
 - On first setup, cloudpass.dev stores a salt and an encrypted verifier locally (no master password is stored)
 - Biometric unlock: macOS Touch ID prompt gates retrieval of the master password stored in secure OS keychain (via Keytar)
 - Storage
   - Local: all secrets are encrypted at rest; UI decrypts in memory after unlock
-  - Remote: a single consolidated encrypted JSON per vault in AWS Secrets Manager; Firestore stores non‑sensitive metadata (title/tags/category)
-- No auto‑lock on window blur; explicit unlock flow provides smoother UX
+  - Remote: a single consolidated encrypted JSON per vault in AWS Secrets Manager; Firestore stores non-sensitive metadata (title/tags/category)
+- No auto-lock on window blur; explicit unlock flow provides smoother UX
 
 ### App Structure
 
 - `src/main/` Electron main process, IPC, AWS, keychain, and local embedded server for packaged builds
 - `src/renderer/` React UI, routing, features, and i18n
-- `src/shared/` cross‑process utilities (crypto, storage, Firebase)
+- `src/shared/` cross-process utilities (crypto, storage, Firebase)
 - `release/` packaged artifacts
 
 Key files to explore
 
-- `src/renderer/features/security/MasterGate.tsx` – unlock/create master password, biometric flow
-- `src/shared/security/crypto.ts` – PBKDF2 + AES helpers
-- `src/renderer/services/vaultApi.ts` – CRUD, Firestore metadata + AWS consolidated blob
-- `src/main/preload.ts` and `types/preload.d.ts` – secure bridge API
-- `src/renderer/i18n.ts` – i18n (English‑only)
+- `src/renderer/features/security/MasterGate.tsx` - unlock/create master password, biometric flow
+- `src/shared/security/crypto.ts` - PBKDF2 + AES helpers
+- `src/renderer/services/vaultApi.ts` - CRUD, Firestore metadata + AWS consolidated blob
+- `src/main/preload.ts` and `types/preload.d.ts` - secure bridge API
+- `src/renderer/i18n.ts` - i18n (English-only)
 
 ### Troubleshooting
 
 - AWS SSO expired: click SSO Login in the top bar; errors will mention expired tokens
-- Firebase misconfigured: you’ll see an in‑app banner; set `.env` or proceed without cloud metadata
+- Firebase misconfigured: you'll see an in-app banner; set `.env` or proceed without cloud metadata
 
 ### Roadmap
 

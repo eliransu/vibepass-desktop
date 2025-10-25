@@ -44,6 +44,7 @@
     "asar": true,
     "mac": {
       "category": "public.app-category.productivity",
+      "extendInfo": {},
       "target": [
         "dmg",
         "zip"

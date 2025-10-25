@@ -8,8 +8,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       try {
         window.cloudpass.copyToClipboard(text)
         return true
-      } catch (err) {
-        console.warn('Electron clipboard API failed, falling back:', err)
+      } catch {
+        // Electron clipboard API failed, falling back
       }
     }
     
@@ -18,8 +18,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       try {
         await navigator.clipboard.writeText(text)
         return true
-      } catch (err) {
-        console.warn('Modern clipboard API failed, falling back:', err)
+      } catch {
+        // Modern clipboard API failed, falling back
       }
     }
     
@@ -47,20 +47,20 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     let success = false
     try {
       success = document.execCommand('copy')
-    } catch (err) {
-      console.warn('execCommand copy failed:', err)
+    } catch {
+      // execCommand copy failed
     }
     
     // Clean up
     document.body.removeChild(textArea)
     
     if (!success) {
-      console.error('All clipboard methods failed')
+      // All clipboard methods failed
     }
     
     return success
-  } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
+  } catch {
+    // Failed to copy to clipboard
     return false
   }
 }

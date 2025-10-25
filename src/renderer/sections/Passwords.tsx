@@ -434,7 +434,7 @@ function Content(): React.JSX.Element {
   }
 
   async function handleDeleteConfirm() {
-    console.log({deleteConfirm,uid,key})
+    // Debug info for delete confirmation
     if (deleteConfirm.item && uid && key) {
       try {
         setIsDeleting(true)

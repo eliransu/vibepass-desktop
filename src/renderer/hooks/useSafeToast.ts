@@ -5,8 +5,8 @@ export function useSafeToast() {
     return useToast()
   } catch {
     return {
-      showToast: (message: string, type?: 'success' | 'error') => {
-        console.log('🚫 ToastProvider not available, showing toast:', message, type)
+      showToast: (_message: string, _type?: 'success' | 'error') => {
+        // ToastProvider not available, showing toast
       }
     }
   }

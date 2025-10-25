@@ -15,6 +15,7 @@ export type PreloadApi = {
   configSet: (cfg: import('../shared/aws/secretsManager').CloudPassConfig | null) => Promise<boolean>
   fileOpenJson: () => Promise<{ name: string; content: string } | null>
   openExternal: (url: string) => Promise<boolean>
+  openMainApp: () => Promise<boolean>
   awsSsoLogin: () => Promise<{ ok: boolean; error?: string }>
   teamGetSecretValue: (input: { region: string; secretId: string; profile?: string }) => Promise<string | null>
   // Consolidated vault secret helpers
@@ -25,6 +26,11 @@ export type PreloadApi = {
   // Native crop (macOS) - returns data URL
   cropScreen: () => Promise<string | null>
   onLock: (handler: () => void) => void
+  // Tray search helpers
+  traySearchGetData: () => Promise<{ success: true; data: any[] } | { success: false; error: string }>
+  traySearchUpdateCache: (data: any[]) => Promise<boolean>
+  // Window controls
+  // (openMainApp declared above)
 }
 
 const api: PreloadApi = {
@@ -67,6 +73,9 @@ const api: PreloadApi = {
   async openExternal(url: string): Promise<boolean> {
     return ipcRenderer.invoke('shell:open-external', url)
   },
+  async openMainApp(): Promise<boolean> {
+    return ipcRenderer.invoke('app:show-main')
+  },
   async awsSsoLogin(): Promise<{ ok: boolean; error?: string }> {
     return ipcRenderer.invoke('aws:sso-login')
   },
@@ -103,6 +112,12 @@ const api: PreloadApi = {
     ipcRenderer.on('master:lock', () => {
       try { handler() } catch {}
     })
+  },
+  async traySearchGetData(): Promise<{ success: true; data: any[] } | { success: false; error: string }> {
+    return ipcRenderer.invoke('tray-search:get-data')
+  },
+  async traySearchUpdateCache(data: any[]): Promise<boolean> {
+    return ipcRenderer.invoke('tray-search:update-cache', data)
   },
 }
 

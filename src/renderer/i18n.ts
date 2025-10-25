@@ -6,7 +6,7 @@ const resources = {
     translation: {
       app: {
         title: 'CloudPass',
-        welcome: 'Welcome to CloudPass – secure, modern password manager.',
+        welcome: 'Welcome to CloudPass - secure, modern password manager.',
         toggleDir: 'RTL/LTR',
       },
       master: {

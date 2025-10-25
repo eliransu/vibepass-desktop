@@ -12,6 +12,7 @@ import { ModeSelect } from './sections/ModeSelect'
 import { Icon } from './components/ui/icon'
 import { useSafeToast } from './hooks/useSafeToast'
 import { useTranslation } from 'react-i18next'
+import { TraySearchCacheSync } from './components/tray/TraySearchCacheSync'
 
 // Firebase auth removed: gate app by Master password instead
 
@@ -127,6 +128,7 @@ export function AppRouter(): React.JSX.Element {
     return (
       <ToastProvider>
         <VaultErrorHandler />
+        <TraySearchCacheSync />
         <RouterProvider router={router} />
       </ToastProvider>
     )
@@ -167,12 +169,12 @@ function VaultErrorHandler(): React.JSX.Element {
       }
       const display = `${t('errors.identityFailed') || 'Identity failed'}: ${message || code || 'Unknown error'}`
       showToast(display, 'error')
-      console.error('❌ AWS Identity error:', code, message)
+      // AWS Identity error
     }
     function handleVaultAccessDenied(event: CustomEvent) {
-      const { message, secretName } = event.detail
+      const { message: _message, secretName: _secretName } = event.detail
       showToast(`${t('errors.vaultAccessDenied')}: ${t('errors.vaultAccessDeniedDescription')}`, 'error')
-      console.error('🚫 Vault access denied for:', secretName, '-', message)
+      // Vault access denied
     }
 
     window.addEventListener('vault-access-denied', handleVaultAccessDenied as EventListener)

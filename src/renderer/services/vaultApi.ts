@@ -58,7 +58,7 @@ export const vaultApi = createApi({
             
             // Handle null result (defensive programming)
             if (!vaultResult) {
-              console.error('❌ vaultRead returned null - this should not happen with new API')
+              // vaultRead returned null - this should not happen with new API
               return { data: [] }
             }
             
@@ -85,14 +85,14 @@ export const vaultApi = createApi({
                 // Removed verbose success logs
               } catch (decryptError: unknown) {
                 const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
-                console.error('❌ Decryption failed:', msg)
+                // Decryption failed
                 
                 // Try to determine if the data is actually encrypted
                 try {
                   const parsed = JSON.parse(secret)
                   consolidated = parsed as Record<string, VaultItem>
                 } catch {
-                  console.error('❌ Secret is neither valid encrypted data nor valid JSON')
+                  // Secret is neither valid encrypted data nor valid JSON
                   throw new Error(`Failed to decrypt vault data: ${msg}`)
                 }
               }
@@ -103,7 +103,7 @@ export const vaultApi = createApi({
           return { data: Object.values(consolidated) }
         } catch (e: unknown) {
           const msg = typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : 'Unknown error'
-          console.error('🚨 Vault API error:', msg)
+          // Vault API error
           return { error: { status: 500, data: { error: msg } } }
         }
       },
@@ -141,7 +141,7 @@ export const vaultApi = createApi({
           if (preload) {
             const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
-              console.error('❌ vaultRead returned null - this should not happen with new API')
+              // vaultRead returned null - this should not happen with new API
               return { error: { status: 500, data: 'Vault read failed' } }
             }
             if (!currentResult.success) {
@@ -160,9 +160,8 @@ export const vaultApi = createApi({
                 parsed = isWork 
                   ? (JSON.parse(String(current)) as Record<string, VaultItem>)
                   : decryptJson<Record<string, VaultItem>>(String(current), key)
-              } catch (decryptError: unknown) {
-                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
-                console.error('❌ Decryption failed in create operation:', msg)
+              } catch {
+                // Decryption failed in create operation
                 // Try parsing as plain JSON
                 try {
                   parsed = JSON.parse(String(current)) as Record<string, VaultItem>
@@ -213,7 +212,7 @@ export const vaultApi = createApi({
           if (preload) {
             const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
-              console.error('❌ vaultRead returned null - this should not happen with new API')
+              // vaultRead returned null - this should not happen with new API
               return { error: { status: 500, data: 'Vault read failed' } }
             }
             if (!currentResult.success) {
@@ -232,9 +231,8 @@ export const vaultApi = createApi({
                 parsed = isWork 
                   ? (JSON.parse(String(current)) as Record<string, VaultItem>)
                   : decryptJson<Record<string, VaultItem>>(String(current), key)
-              } catch (decryptError: unknown) {
-                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
-                console.error('❌ Decryption failed in update operation:', msg)
+              } catch {
+                // Decryption failed in update operation
                 // Try parsing as plain JSON
                 try {
                   parsed = JSON.parse(String(current)) as Record<string, VaultItem>
@@ -284,7 +282,7 @@ export const vaultApi = createApi({
             const isWork = selectedVaultId === 'work'
             const currentResult = await preload.vaultRead({ region: regionOverride || region, name, profile: profileOverride || profile })
             if (!currentResult) {
-              console.error('❌ vaultRead returned null - this should not happen with new API')
+              // vaultRead returned null - this should not happen with new API
               return { error: { status: 500, data: 'Vault read failed' } }
             }
             if (!currentResult.success) {
@@ -303,9 +301,8 @@ export const vaultApi = createApi({
                 parsed = isWork 
                   ? (JSON.parse(String(current)) as Record<string, VaultItem>)
                   : decryptJson<Record<string, VaultItem>>(String(current), key)
-              } catch (decryptError: unknown) {
-                const msg = typeof decryptError === 'object' && decryptError && 'message' in decryptError ? String((decryptError as { message?: unknown }).message) : 'Unknown error'
-                console.error('❌ Decryption failed in remove operation:', msg)
+              } catch {
+                // Decryption failed in remove operation
                 // Try parsing as plain JSON
                 try {
                   parsed = JSON.parse(String(current)) as Record<string, VaultItem>

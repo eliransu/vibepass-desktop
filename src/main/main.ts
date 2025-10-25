@@ -12,11 +12,19 @@ import { execFile, execFileSync } from 'node:child_process'
 import { SSOOIDCClient, RegisterClientCommand, StartDeviceAuthorizationCommand, CreateTokenCommand } from '@aws-sdk/client-sso-oidc'
 import { SSOClient, GetRoleCredentialsCommand } from '@aws-sdk/client-sso'
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts'
+import { TrayManager } from './managers/TrayManager'
+import { GlobalShortcutManager } from './managers/GlobalShortcutManager'
+import { QuickSearchWindowManager } from './managers/QuickSearchWindowManager'
 
 let mainWindow: BrowserWindow | null = null
 // Overlay window support removed
 const store = new Store<{ [key: string]: unknown }>({ name: 'cloudpass' })
 // Removed blur-based auto-lock; we only lock on hide now
+
+// System tray and quick search managers
+const trayManager = new TrayManager()
+const shortcutManager = new GlobalShortcutManager()
+const quickSearchManager = new QuickSearchWindowManager()
 
 // All AWS/SSO OS-based helpers removed. We strictly use explicit JSON config.
 
@@ -34,7 +42,7 @@ function createMainWindow(): void {
     },
   })
 
-  const isDev = process.env.NODE_ENV === 'development'
+  const isDev = !app.isPackaged
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
     mainWindow.loadURL('http://localhost:3000')
@@ -117,8 +125,92 @@ function createMainWindow(): void {
 }
 
 app.whenReady().then(() => {
-  createMainWindow()
+  // App is ready, initializing...
+  // Ensure app launches at login on macOS
+  if (process.platform === 'darwin') {
+    try { app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true }) } catch {}
+  }
+  
+  // Initialize system tray FIRST (like Alfred)
+  // Initializing system tray...
+  // Restore tray vault source preference before building menu
+  try {
+    const pref = store.get('trayVaultSource') as 'local' | 'cloud' | undefined
+    if (pref === 'local' || pref === 'cloud') {
+      trayManager.setVaultSource(pref)
+    }
+  } catch {}
+  trayManager.onVaultSourceChange((source) => {
+    try { store.set('trayVaultSource', source) } catch {}
+  })
+  trayManager.initialize()
+  trayManager.onSearchClick(() => {
+    // Tray search clicked
+    quickSearchManager.toggle()
+  })
+  trayManager.onExitClick(() => {
+    // Exit clicked from tray
+    app.quit()
+  })
+  
+  // Add "Show Main App" option to tray menu
+  trayManager.onShowAppClick(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow()
+    } else {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+  trayManager.onAddNewClick(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow()
+    } else {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+    // The main app will route to Add New by default
+  })
+  
   Menu.setApplicationMenu(null)
+
+  // First install: show the app. Otherwise: tray-only at launch
+  try {
+    const hasRun = Boolean(store.get('hasRun'))
+    if (!hasRun) {
+      createMainWindow()
+      store.set('hasRun', true)
+    } else {
+      if (process.platform === 'darwin' && typeof app.dock?.hide === 'function') {
+        try { app.dock.hide() } catch {}
+      }
+      // Do not create main window on subsequent launches
+    }
+  } catch {
+    // On any failure, default to showing the app
+    createMainWindow()
+  }
+  
+  // Initialize global shortcuts
+  // Initializing global shortcuts...
+  shortcutManager.initialize()
+  
+  // Register global shortcut: Command+P+A+S+S
+  // Note: For chord shortcuts, we use a single combined shortcut
+  // macOS doesn't support true chord sequences, so we use Cmd+Shift+Alt+P as alternative
+  const searchShortcut = process.platform === 'darwin' 
+    ? 'Command+Shift+Alt+P' 
+    : 'Control+Shift+Alt+P'
+  
+  const registered = shortcutManager.register(searchShortcut, () => {
+    // Global shortcut triggered
+    quickSearchManager.toggle()
+  })
+  
+  if (registered) {
+    // Global shortcut registered successfully
+  }
+  
   if (!app.isPackaged) return
   if (process.env.CLOUDPASS_AUTOUPDATE === '1' || process.env.ENESECRETS_AUTOUPDATE === '1' || process.env.VIBEPASS_AUTOUPDATE === '1') {
     autoUpdater.checkForUpdatesAndNotify().catch(() => undefined)
@@ -126,11 +218,25 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  // Don't quit on window close - tray icon keeps app running
+  // User must explicitly choose "Exit" from tray menu
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+  // On macOS, clicking dock icon shows main window
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow()
+  } else {
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
+
+app.on('before-quit', () => {
+  // Cleanup managers
+  trayManager.destroy()
+  shortcutManager.unregisterAll()
+  quickSearchManager.destroy()
 })
 
 // Secure IPC for keytar
@@ -256,17 +362,9 @@ ipcMain.handle('vault:read', async (_evt, input: { region: string; name: string;
     : cfg ?? null
   const client = createSecretsClient(region, effectiveAuth)
   try {
-    // console.log({name,region,effectiveAuth,client,cfg,sess})
     const result = await getSecret(client, name)
     return { success: true, data: result ?? null }
   } catch (e: any) {
-    console.log({name})
-    console.error('vault:read error:', name, 'Error details:', JSON.stringify({
-      name: e.name,
-      __type: e.__type,
-      code: e.code,
-      message: e.message
-    }, null, 2))
     
     // Check multiple possible error type indicators
     const isAccessDenied = e.__type === 'AccessDeniedException' || 
@@ -369,6 +467,21 @@ ipcMain.handle('file:open-json', async () => {
 // Open external URL in default browser
 ipcMain.handle('shell:open-external', async (_evt, url: string) => {
   try { shell.openExternal(String(url || '')); return true } catch { return false }
+})
+
+// Show or create the main application window
+ipcMain.handle('app:show-main', async () => {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow()
+    } else {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+    return true
+  } catch {
+    return false
+  }
 })
 
 // Explicit SSO device authorization login using JSON config
@@ -480,7 +593,7 @@ ipcMain.handle('aws:get-user-identity', async () => {
   } catch (e: any) {
     const code = e?.name || e?.code || 'UnknownError'
     const message = e?.message || 'Unknown error'
-    console.error('❌ Failed to get AWS user identity:', message)
+    // Failed to get AWS user identity
     return { ok: false, error: `Unable to determine user identity from AWS STS: ${message}`, code }
   }
 })
@@ -517,6 +630,28 @@ ipcMain.handle('screen:crop', async () => {
     return dataUrl
   } catch {
     return null
+  }
+})
+
+// Quick search IPC handlers for tray window
+ipcMain.handle('tray-search:get-data', async () => {
+  try {
+    // Get all vault data for quick search
+    // This will be called by the tray search window to get searchable items
+    const allData = store.get('tray-search-cache') as any[] || []
+    return { success: true, data: allData }
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Failed to get search data' }
+  }
+})
+
+ipcMain.handle('tray-search:update-cache', async (_evt, data: any[]) => {
+  try {
+    // Update the search cache (called by main window when vault data changes)
+    store.set('tray-search-cache', data)
+    return true
+  } catch {
+    return false
   }
 })
 

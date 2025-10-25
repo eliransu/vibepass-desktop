@@ -122,7 +122,7 @@ export function Icon({ name, size = 16, className, strokeWidth = 2, ...props }: 
   const IconComponent = iconMap[name] as LucideIcon
   
   if (!IconComponent) {
-    console.warn(`Icon "${name}" not found`)
+    // Icon not found
     return <div className={cn('inline-block', className)} style={{ width: size, height: size }} />
   }
   

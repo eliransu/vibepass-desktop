@@ -7,17 +7,25 @@ module.exports = {
     mode: 'development',
     target: 'web',
     devtool: 'inline-source-map',
-    entry: path.resolve(__dirname, 'src/renderer/index.tsx'),
+    entry: {
+        main: path.resolve(__dirname, 'src/renderer/index.tsx'),
+        'tray-search': path.resolve(__dirname, 'src/renderer/tray-search.tsx'),
+    },
     output: {
         path: path.resolve(__dirname, 'dist/renderer'),
-        filename: 'bundle.js',
+        filename: '[name].js',
         publicPath: '/',
     },
     devServer: {
         port: 3000,
         hot: true,
         headers: { 'Access-Control-Allow-Origin': '*' },
-        historyApiFallback: true,
+        historyApiFallback: {
+            rewrites: [
+                { from: /^\/tray-search/, to: '/tray-search.html' },
+                { from: /./, to: '/index.html' },
+            ],
+        },
     },
     resolve: {
         extensions: ['.ts', '.tsx', '.js'],
@@ -38,6 +46,13 @@ module.exports = {
     plugins: [
         new HtmlWebpackPlugin({
             template: path.resolve(__dirname, 'src/renderer/index.html'),
+            filename: 'index.html',
+            chunks: ['main'],
+        }),
+        new HtmlWebpackPlugin({
+            template: path.resolve(__dirname, 'src/renderer/tray-search.html'),
+            filename: 'tray-search.html',
+            chunks: ['tray-search'],
         }),
         new Dotenv(),
     ],
